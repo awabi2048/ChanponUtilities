@@ -1,0 +1,20 @@
+name: Chanpon-Utilities
+main: me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
+version: ${project.version}
+api-version: "1.21"
+depend:
+  - CC-System
+
+permissions:
+  chanponutilities.admin:
+    description: Chanpon-Utilities 全機能の管理権限
+    default: op
+    children:
+      chanponutilities.link: true
+      chanponutilities.read: true
+  chanponutilities.link:
+    description: 本棚設置時に書見台リンクを作成する権限
+    default: true
+  chanponutilities.read:
+    description: リンクされた本棚から書見台の本を読む権限
+    default: true

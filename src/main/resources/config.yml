@@ -1,0 +1,24 @@
+features:
+  lectern_bookshelf_link:
+    enabled: true
+
+effects:
+  link_success:
+    enabled: true
+    particle:
+      enabled: true
+      points_per_edge: 6
+      size: 1.1
+      lectern_color:
+        r: 0
+        g: 255
+        b: 0
+      bookshelf_color:
+        r: 255
+        g: 255
+        b: 0
+    sound:
+      enabled: true
+      key: minecraft:entity.experience_orb.pickup
+      volume: 1.0
+      pitch: 2.0
