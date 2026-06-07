@@ -3,6 +3,7 @@ package me.awabi2048.chanponutilities.listener
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.effect.BlockFrameEffectRenderer
 import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
+import me.awabi2048.chanponutilities.util.ChanponI18n
 import org.bukkit.Color
 import org.bukkit.Material
 import org.bukkit.block.Block
@@ -70,6 +71,15 @@ class LecternBookshelfLinkListener(
         }
 
         val lecternPosition = linkStore.linkedLecternPosition(clicked) ?: return
+
+        if (event.player.isSneaking) {
+            linkStore.unlinkByBookshelf(clicked)
+            event.player.playSound(event.player.location, "minecraft:block.wooden_button.click_off", 1.0f, 1.0f)
+            event.player.sendMessage(ChanponI18n.text(event.player, "unlink.success"))
+            event.isCancelled = true
+            return
+        }
+
         val lecternBlock = lecternPosition.resolveBlock()
         if (lecternBlock == null || lecternBlock.type != Material.LECTERN) {
             linkStore.unlinkByBookshelf(clicked)

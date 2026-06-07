@@ -1,3 +1,6 @@
 chanpon_utilities:
   common:
     prefix: "&7[&bChanpon-Utilities&7] "
+  unlink:
+    success: "&a書見台とのリンクを解除しました"
+    already: "&eこの本棚はリンクされていません"

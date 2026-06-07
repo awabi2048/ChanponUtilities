@@ -1,3 +1,6 @@
 chanpon_utilities:
   common:
     prefix: "&7[&bChanpon-Utilities&7] "
+  unlink:
+    success: "&aUnlinked from the lectern"
+    already: "&eThis bookshelf is not linked"
