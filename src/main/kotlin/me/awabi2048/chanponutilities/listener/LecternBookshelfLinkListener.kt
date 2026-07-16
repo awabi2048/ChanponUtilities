@@ -92,12 +92,12 @@ class LecternBookshelfLinkListener(
             Material.WRITTEN_BOOK -> rawBook.clone()
             Material.WRITABLE_BOOK -> {
                 val meta = rawBook.itemMeta as? BookMeta ?: return
-                val pages = meta.pages ?: return
+                val pages = meta.pages()
                 val written = ItemStack(Material.WRITTEN_BOOK)
                 val writtenMeta = written.itemMeta as? BookMeta ?: return
                 writtenMeta.title = "\uD83D\uDCDD"
                 writtenMeta.author = event.player.name
-                writtenMeta.pages = pages
+                writtenMeta.pages(pages)
                 written.itemMeta = writtenMeta
                 written
             }
