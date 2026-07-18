@@ -6,22 +6,24 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 
 class DoublePressTrackerTest {
+    private val tenTicks = 500L
+
     @Test
-    fun `second press inside window triggers once`() {
+    fun `second press inside ten ticks triggers once`() {
         val tracker = DoublePressTracker()
         val player = UUID.randomUUID()
-        assertFalse(tracker.press(player, 1_000, 900))
-        assertTrue(tracker.press(player, 1_800, 900))
-        assertFalse(tracker.press(player, 1_900, 900))
+        assertFalse(tracker.press(player, 1_000, tenTicks))
+        assertTrue(tracker.press(player, 1_500, tenTicks))
+        assertFalse(tracker.press(player, 1_600, tenTicks))
     }
 
     @Test
     fun `expired and reversed timestamps do not trigger`() {
         val tracker = DoublePressTracker()
         val player = UUID.randomUUID()
-        assertFalse(tracker.press(player, 1_000, 900))
-        assertFalse(tracker.press(player, 2_000, 900))
-        assertFalse(tracker.press(player, 1_500, 900))
+        assertFalse(tracker.press(player, 1_000, tenTicks))
+        assertFalse(tracker.press(player, 1_501, tenTicks))
+        assertFalse(tracker.press(player, 1_000, tenTicks))
     }
 
     @Test
@@ -29,9 +31,9 @@ class DoublePressTrackerTest {
         val tracker = DoublePressTracker()
         val first = UUID.randomUUID()
         val second = UUID.randomUUID()
-        assertFalse(tracker.press(first, 1_000, 900))
-        assertFalse(tracker.press(second, 1_100, 900))
-        assertTrue(tracker.press(first, 1_200, 900))
-        assertTrue(tracker.press(second, 1_300, 900))
+        assertFalse(tracker.press(first, 1_000, tenTicks))
+        assertFalse(tracker.press(second, 1_100, tenTicks))
+        assertTrue(tracker.press(first, 1_200, tenTicks))
+        assertTrue(tracker.press(second, 1_300, tenTicks))
     }
 }

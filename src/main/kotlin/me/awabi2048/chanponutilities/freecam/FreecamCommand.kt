@@ -15,11 +15,17 @@ class FreecamCommand(private val service: FreecamSessionService) : CommandExecut
             "start" -> if (!service.start(player)) player.sendMessage(ChanponI18n.text(player, "freecam.unavailable"))
             "stop" -> if (!service.stop(player.uniqueId, FreecamExitReason.MANUAL)) player.sendMessage(ChanponI18n.text(player, "freecam.not_active"))
             "status" -> player.sendMessage(ChanponI18n.text(player, if (service.isActive(player.uniqueId)) "freecam.status.active" else "freecam.status.inactive"))
+            "toggle_shortcut" -> {
+                val enabled = service.toggleShortcut(player.uniqueId)
+                player.sendMessage(ChanponI18n.text(player, if (enabled) "freecam.shortcut.enabled" else "freecam.shortcut.disabled"))
+            }
             else -> player.sendMessage(ChanponI18n.text(player, "freecam.usage"))
         }
         return true
     }
 
-    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> =
-        if (args.size == 1) listOf("start", "stop", "status").filter { it.startsWith(args[0], true) } else emptyList()
+    override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> = when (args.size) {
+        1 -> listOf("start", "stop", "status", "toggle_shortcut").filter { it.startsWith(args[0], true) }
+        else -> emptyList()
+    }
 }

@@ -19,6 +19,7 @@ data class BodySnapshot(
     val playerId: UUID,
     val anchor: Location,
     val pose: Pose,
+    val requiresSeatMount: Boolean,
     val originalGameMode: GameMode,
     val allowFlight: Boolean,
     val flying: Boolean,
@@ -28,6 +29,7 @@ data class BodySnapshot(
 data class FreecamSession(
     val snapshot: BodySnapshot,
     val mannequinId: UUID,
+    val seatMountId: UUID?,
     val chunkX: Int,
     val chunkZ: Int
 )
