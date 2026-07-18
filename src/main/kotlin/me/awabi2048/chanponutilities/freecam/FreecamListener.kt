@@ -42,7 +42,7 @@ class FreecamListener(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onSwap(event: PlayerSwapHandItemsEvent) {
         val player = event.player
-        if (!actionsEnabled() || service.isActive(player.uniqueId)) return
+        if (!actionsEnabled() || !service.isShortcutEnabled(player.uniqueId) || service.isActive(player.uniqueId)) return
         event.isCancelled = true
         val now = System.currentTimeMillis()
         if (fPresses.press(player.uniqueId, now, actionWindow())) {
@@ -167,6 +167,12 @@ class FreecamListener(
     }
 
     private fun actionsEnabled() = plugin.config.getBoolean("features.freecam.activation.action.enabled", true)
-    private fun actionWindow() = plugin.config.getLong("features.freecam.activation.action.window_milliseconds", 900L).coerceIn(200L, 3_000L)
+    private fun actionWindow() = plugin.config
+        .getLong("features.freecam.activation.action.window_ticks", 10L)
+        .coerceIn(1L, 60L) * MILLISECONDS_PER_TICK
+
+    private companion object {
+        const val MILLISECONDS_PER_TICK = 50L
+    }
     private fun clear(uuid: UUID) { fPresses.clear(uuid); shiftPresses.clear(uuid) }
 }

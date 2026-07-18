@@ -6,7 +6,7 @@ features:
     activation:
       action:
         enabled: true
-        window_milliseconds: 900
+        window_ticks: 10
       item:
         enabled: true
         material: ENDER_EYE
@@ -37,4 +37,4 @@ effects:
       key: minecraft:entity.experience_orb.pickup
       volume: 1.0
       pitch: 2.0
-config_version: 2
+config_version: 3

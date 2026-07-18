@@ -23,6 +23,10 @@
             <id>papermc</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
+        <repository>
+            <id>modrinth</id>
+            <url>https://api.modrinth.com/maven</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -42,6 +46,12 @@
             <groupId>awabi2048</groupId>
             <artifactId>my-world-manager</artifactId>
             <version>1.6.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>maven.modrinth</groupId>
+            <artifactId>GOHbQGyX</artifactId>
+            <version>nZM8fxpG</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
