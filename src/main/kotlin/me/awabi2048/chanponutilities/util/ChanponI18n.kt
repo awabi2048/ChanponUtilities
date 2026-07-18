@@ -4,17 +4,15 @@ import com.awabi2048.ccsystem.CCSystem
 import org.bukkit.entity.Player
 
 object ChanponI18n {
-    private const val SOURCE_ID = "chanpon_utilities"
-
     fun text(player: Player?, key: String, vararg placeholders: Pair<String, Any?>): String {
         return CCSystem.getAPI()
-            .getI18nString(player, "$SOURCE_ID.$key", placeholdersMap(*placeholders))
+            .getI18nString(player, "chanpon_utilities.$key", placeholdersMap(*placeholders))
             .replace('&', '§')
     }
 
     fun list(player: Player?, key: String, vararg placeholders: Pair<String, Any?>): List<String> {
         return CCSystem.getAPI()
-            .getI18nStringList(player, "$SOURCE_ID.$key", placeholdersMap(*placeholders))
+            .getI18nStringList(player, "chanpon_utilities.$key", placeholdersMap(*placeholders))
             .map { it.replace('&', '§') }
     }
 

@@ -52,7 +52,7 @@ class PlayerStatePolicyListener(
     fun onFlightToggle(event: PlayerToggleFlightEvent) {
         val player = event.player
         if (!ChanponPlayerStateRules.flightRestrictionApplies(player.gameMode)) return
-        val worldData = MyWorldManagerApi.getWorldRepository()?.findByWorldName(player.world.name) ?: return
+        val worldData = MyWorldManagerApi.getWorldRepository()?.findByWorldKey(player.world.key.toString()) ?: return
         if (worldData.allowFlight) return
         event.isCancelled = true
         player.allowFlight = false
@@ -70,12 +70,12 @@ class PlayerStatePolicyListener(
     }
 
     private fun sync(player: org.bukkit.entity.Player) {
-        val worldData = MyWorldManagerApi.getWorldRepository()?.findByWorldName(player.world.name) ?: return
+        val worldData = MyWorldManagerApi.getWorldRepository()?.findByWorldKey(player.world.key.toString()) ?: return
         MyWorldManagerApi.syncWorldPlayerState(player, worldData)
     }
 
     private fun canBuild(player: org.bukkit.entity.Player): Boolean {
-        val worldData = MyWorldManagerApi.getWorldRepository()?.findByWorldName(player.world.name) ?: return true
+        val worldData = MyWorldManagerApi.getWorldRepository()?.findByWorldKey(player.world.key.toString()) ?: return true
         return MyWorldManagerApi.canBuildInWorld(player, worldData)
     }
 }
