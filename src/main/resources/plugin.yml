@@ -1,11 +1,19 @@
 name: Chanpon-Utilities
 main: me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 version: ${project.version}
-api-version: "1.21"
+api-version: "26.1.2"
 depend:
   - CC-System
 softdepend:
   - MyWorldManager
+  - GSit
+
+commands:
+  freecam:
+    description: FreeCamを開始または終了します
+    usage: /freecam [start|stop|status]
+    aliases: [fcam]
+    permission: chanponutilities.freecam
 
 permissions:
   chanponutilities.admin:
@@ -14,9 +22,13 @@ permissions:
     children:
       chanponutilities.link: true
       chanponutilities.read: true
+      chanponutilities.freecam: true
   chanponutilities.link:
     description: 本棚設置時に書見台リンクを作成する権限
     default: true
   chanponutilities.read:
     description: リンクされた本棚から書見台の本を読む権限
+    default: true
+  chanponutilities.freecam:
+    description: FreeCamを使用する権限
     default: true

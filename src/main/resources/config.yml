@@ -1,6 +1,21 @@
 features:
   lectern_bookshelf_link:
     enabled: true
+  freecam:
+    enabled: true
+    activation:
+      action:
+        enabled: true
+        window_milliseconds: 900
+      item:
+        enabled: true
+        material: ENDER_EYE
+    restrictions:
+      allowed_commands:
+        - freecam
+        - fcam
+        - msg
+        - reply
 
 effects:
   link_success:
@@ -22,3 +37,4 @@ effects:
       key: minecraft:entity.experience_orb.pickup
       volume: 1.0
       pitch: 2.0
+config_version: 2
