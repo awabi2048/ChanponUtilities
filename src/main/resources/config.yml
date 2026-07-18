@@ -3,6 +3,7 @@ features:
     enabled: true
   freecam:
     enabled: true
+    reset_distance_default: 128
     activation:
       action:
         enabled: true
@@ -37,4 +38,4 @@ effects:
       key: minecraft:entity.experience_orb.pickup
       volume: 1.0
       pitch: 2.0
-config_version: 3
+config_version: 4

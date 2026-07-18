@@ -27,6 +27,9 @@ class FreecamSessionService(
     fun isActive(playerId: UUID): Boolean = sessions.containsKey(playerId)
     fun isShortcutEnabled(playerId: UUID): Boolean = preferences.isShortcutEnabled(playerId)
     fun toggleShortcut(playerId: UUID): Boolean = preferences.toggleShortcut(playerId)
+    fun resetDistance(playerId: UUID): Int = preferences.resetDistance(playerId)
+    fun setResetDistance(playerId: UUID, distance: Int) = preferences.setResetDistance(playerId, distance)
+    fun resetResetDistance(playerId: UUID): Int = preferences.resetResetDistance(playerId)
     fun isInternalTeleport(playerId: UUID): Boolean = internalTeleports.contains(playerId)
     fun ownerOf(mannequin: Mannequin): UUID? = mannequin.persistentDataContainer
         .get(bodyOwner, PersistentDataType.STRING)?.let { runCatching { UUID.fromString(it) }.getOrNull() }
@@ -64,7 +67,10 @@ class FreecamSessionService(
         return try {
             player.gameMode = GameMode.SPECTATOR
             if (startMode == FreecamStartMode.PREVIOUS_CAMERA_POSITION) {
-                recovery.loadPreviousCamera(player.uniqueId)?.let { location ->
+                recovery.loadPreviousCamera(player.uniqueId)?.takeIf { location ->
+                    location.world.uid == snapshot.anchor.world.uid &&
+                        location.distanceSquared(snapshot.anchor) <= resetDistance(player.uniqueId).toDouble().let { it * it }
+                }?.let { location ->
                     internalTeleports.add(player.uniqueId)
                     try {
                         player.teleport(location)
@@ -82,12 +88,17 @@ class FreecamSessionService(
         }
     }
 
-    fun stop(playerId: UUID, reason: FreecamExitReason, notify: Boolean = true): Boolean {
+    fun stop(
+        playerId: UUID,
+        reason: FreecamExitReason,
+        notify: Boolean = true,
+        finalCameraPosition: org.bukkit.Location? = null
+    ): Boolean {
         val session = sessions.remove(playerId) ?: return false
         val player = plugin.server.getPlayer(playerId)
         val mannequin = plugin.server.getEntity(session.mannequinId) as? Mannequin
         val seatMount = session.seatMountId?.let(plugin.server::getEntity)
-        val previousCamera = player?.takeIf { it.isOnline }?.location?.clone()
+        val previousCamera = finalCameraPosition?.clone() ?: player?.takeIf { it.isOnline }?.location?.clone()
         try {
             if (player != null && player.isOnline) {
                 player.teleport(session.snapshot.anchor)

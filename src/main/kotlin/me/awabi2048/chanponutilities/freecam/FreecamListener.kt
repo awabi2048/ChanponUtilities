@@ -26,6 +26,7 @@ import org.bukkit.event.player.PlayerToggleSneakEvent
 import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class FreecamListener(
     private val plugin: ChanponUtilitiesPlugin,
@@ -33,6 +34,7 @@ class FreecamListener(
 ) : Listener {
     private val fPresses = DoublePressTracker()
     private val shiftPresses = DoublePressTracker()
+    private val firstShiftLocations = ConcurrentHashMap<UUID, org.bukkit.Location>()
 
     @EventHandler
     fun onJoin(event: PlayerJoinEvent) {
@@ -42,6 +44,10 @@ class FreecamListener(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onSwap(event: PlayerSwapHandItemsEvent) {
         val player = event.player
+        if (player.isSneaking) {
+            fPresses.clear(player.uniqueId)
+            return
+        }
         if (!actionsEnabled() || !service.isShortcutEnabled(player.uniqueId) || service.isActive(player.uniqueId)) return
         event.isCancelled = true
         val now = System.currentTimeMillis()
@@ -56,7 +62,14 @@ class FreecamListener(
         if (!actionsEnabled() || !service.isActive(player.uniqueId) || !event.isSneaking) return
         val now = System.currentTimeMillis()
         if (shiftPresses.press(player.uniqueId, now, actionWindow())) {
-            service.stop(player.uniqueId, FreecamExitReason.MANUAL)
+            val finalCameraPosition = firstShiftLocations.remove(player.uniqueId)
+            service.stop(
+                player.uniqueId,
+                FreecamExitReason.MANUAL,
+                finalCameraPosition = finalCameraPosition
+            )
+        } else {
+            firstShiftLocations[player.uniqueId] = player.location.clone()
         }
     }
 
@@ -164,6 +177,7 @@ class FreecamListener(
                 service.stop(event.player.uniqueId, FreecamExitReason.GAME_MODE_CHANGED)
             })
         }
+        if (event.newGameMode != GameMode.SPECTATOR) clear(event.player.uniqueId)
     }
 
     private fun actionsEnabled() = plugin.config.getBoolean("features.freecam.activation.action.enabled", true)
@@ -174,5 +188,9 @@ class FreecamListener(
     private companion object {
         const val MILLISECONDS_PER_TICK = 50L
     }
-    private fun clear(uuid: UUID) { fPresses.clear(uuid); shiftPresses.clear(uuid) }
+    private fun clear(uuid: UUID) {
+        fPresses.clear(uuid)
+        shiftPresses.clear(uuid)
+        firstShiftLocations.remove(uuid)
+    }
 }

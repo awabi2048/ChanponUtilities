@@ -27,7 +27,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     sourcePlugin = this,
                     resourcePath = "config.yml",
                     targetPath = dataFolder.resolve("config.yml").toPath(),
-                    currentVersion = 3,
+                    currentVersion = 4,
                     classification = com.awabi2048.ccsystem.api.config.ConfigClassification.MANAGED_CONFIG,
                     migrations = mapOf(1 to com.awabi2048.ccsystem.api.config.ConfigMigration { config ->
                         config.set("features.freecam.enabled", config.getBoolean("features.freecam.enabled", true))
@@ -43,11 +43,17 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     2 to com.awabi2048.ccsystem.api.config.ConfigMigration { config ->
                         config.set("features.freecam.activation.action.window_ticks", 10)
                         config.set("features.freecam.activation.action.window_milliseconds", null)
+                    },
+                    3 to com.awabi2048.ccsystem.api.config.ConfigMigration { config ->
+                        config.set("features.freecam.reset_distance_default", 128)
                     }),
                     validator = com.awabi2048.ccsystem.api.config.ConfigValidator { config ->
                         require(config.get("features.freecam.enabled") is Boolean) { "features.freecam.enabled must be boolean" }
                         require(config.get("features.freecam.activation.action.enabled") is Boolean) { "freecam action enabled must be boolean" }
                         require(config.getInt("features.freecam.activation.action.window_ticks") in 1..60) { "freecam action window_ticks must be 1..60" }
+                        require(config.get("features.freecam.reset_distance_default") is Int &&
+                            config.getInt("features.freecam.reset_distance_default") in 0..30_000_000
+                        ) { "freecam reset_distance_default must be an integer between 0 and 30000000" }
                         require(config.get("features.freecam.activation.item.enabled") is Boolean) { "freecam item enabled must be boolean" }
                         require(org.bukkit.Material.matchMaterial(config.getString("features.freecam.activation.item.material").orEmpty()) != null) { "freecam item material is invalid" }
                         require(config.isList("features.freecam.restrictions.allowed_commands")) { "freecam allowed_commands must be list" }

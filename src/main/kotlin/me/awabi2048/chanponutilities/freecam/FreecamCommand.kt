@@ -19,13 +19,30 @@ class FreecamCommand(private val service: FreecamSessionService) : CommandExecut
                 val enabled = service.toggleShortcut(player.uniqueId)
                 player.sendMessage(ChanponI18n.text(player, if (enabled) "freecam.shortcut.enabled" else "freecam.shortcut.disabled"))
             }
+            "reset_distance" -> handleResetDistance(player, args.getOrNull(1))
             else -> player.sendMessage(ChanponI18n.text(player, "freecam.usage"))
         }
         return true
     }
 
+    private fun handleResetDistance(player: Player, argument: String?) {
+        if (argument.equals("reset", ignoreCase = true)) {
+            val distance = service.resetResetDistance(player.uniqueId)
+            player.sendMessage(ChanponI18n.text(player, "freecam.reset_distance.reset", "distance" to distance))
+            return
+        }
+        val distance = argument?.toIntOrNull()
+        if (distance == null || distance !in 0..30_000_000) {
+            player.sendMessage(ChanponI18n.text(player, "freecam.reset_distance.usage"))
+            return
+        }
+        service.setResetDistance(player.uniqueId, distance)
+        player.sendMessage(ChanponI18n.text(player, "freecam.reset_distance.changed", "distance" to distance))
+    }
+
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> = when (args.size) {
-        1 -> listOf("start", "stop", "status", "toggle_shortcut").filter { it.startsWith(args[0], true) }
+        1 -> listOf("start", "stop", "status", "toggle_shortcut", "reset_distance").filter { it.startsWith(args[0], true) }
+        2 -> if (args[0].equals("reset_distance", true)) listOf("reset").filter { it.startsWith(args[1], true) } else emptyList()
         else -> emptyList()
     }
 }

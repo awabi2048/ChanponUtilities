@@ -6,6 +6,7 @@ import java.io.File
 import java.util.UUID
 
 class FreecamPreferenceStore(plugin: JavaPlugin) {
+    private val plugin = plugin
     private val file = File(plugin.dataFolder, "data/freecam-preferences.yml")
     private val yaml = YamlConfiguration.loadConfiguration(file)
 
@@ -20,5 +21,30 @@ class FreecamPreferenceStore(plugin: JavaPlugin) {
         file.parentFile.mkdirs()
         yaml.save(file)
         return enabled
+    }
+
+    @Synchronized
+    fun resetDistance(playerId: UUID): Int =
+        yaml.getInt(
+            "players.$playerId.reset_distance",
+            plugin.config.getInt("features.freecam.reset_distance_default", 128)
+        )
+
+    @Synchronized
+    fun setResetDistance(playerId: UUID, distance: Int) {
+        yaml.set("players.$playerId.reset_distance", distance)
+        persist()
+    }
+
+    @Synchronized
+    fun resetResetDistance(playerId: UUID): Int {
+        yaml.set("players.$playerId.reset_distance", null)
+        persist()
+        return resetDistance(playerId)
+    }
+
+    private fun persist() {
+        file.parentFile.mkdirs()
+        yaml.save(file)
     }
 }
