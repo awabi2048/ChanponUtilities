@@ -11,7 +11,7 @@ softdepend:
 commands:
   freecam:
     description: FreeCamを開始または終了します
-    usage: /freecam [start|stop|status|toggle_shortcut]
+    usage: /freecam [start|stop|status|toggle_shortcut|reset_distance]
     aliases: [fcam]
     permission: chanponutilities.freecam
 
