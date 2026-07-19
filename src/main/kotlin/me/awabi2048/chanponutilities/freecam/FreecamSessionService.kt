@@ -66,20 +66,30 @@ class FreecamSessionService(
         )
         return try {
             player.gameMode = GameMode.SPECTATOR
+            var previousCameraTooFar = false
             if (startMode == FreecamStartMode.PREVIOUS_CAMERA_POSITION) {
-                recovery.loadPreviousCamera(player.uniqueId)?.takeIf { location ->
-                    location.world.uid == snapshot.anchor.world.uid &&
-                        location.distanceSquared(snapshot.anchor) <= resetDistance(player.uniqueId).toDouble().let { it * it }
-                }?.let { location ->
-                    internalTeleports.add(player.uniqueId)
-                    try {
-                        player.teleport(location)
-                    } finally {
-                        internalTeleports.remove(player.uniqueId)
+                recovery.loadPreviousCamera(player.uniqueId)?.let { location ->
+                    val withinResetDistance = location.world.uid == snapshot.anchor.world.uid &&
+                        location.distanceSquared(snapshot.anchor) <=
+                        resetDistance(player.uniqueId).toDouble().let { it * it }
+                    if (withinResetDistance) {
+                        internalTeleports.add(player.uniqueId)
+                        try {
+                            player.teleport(location)
+                        } finally {
+                            internalTeleports.remove(player.uniqueId)
+                        }
+                    } else {
+                        previousCameraTooFar = true
                     }
                 }
             }
-            player.sendMessage(ChanponI18n.text(player, "freecam.started"))
+            if (previousCameraTooFar) {
+                ChanponI18n.list(player, "freecam.previous_camera_too_far").forEach(player::sendMessage)
+            }
+            if (preferences.shouldShowStartMessage(player.uniqueId)) {
+                ChanponI18n.list(player, "freecam.started").forEach(player::sendMessage)
+            }
             scheduleMonitor(player)
             true
         } catch (failure: Exception) {
@@ -106,7 +116,9 @@ class FreecamSessionService(
                 player.allowFlight = session.snapshot.allowFlight
                 player.isFlying = session.snapshot.flying && session.snapshot.allowFlight
                 player.fallDistance = 0f
-                if (notify) player.sendMessage(ChanponI18n.text(player, if (reason == FreecamExitReason.BODY_DAMAGED) "freecam.body.damaged" else "freecam.stopped"))
+                if (notify && reason == FreecamExitReason.BODY_DAMAGED) {
+                    player.sendMessage(ChanponI18n.text(player, "freecam.body.damaged"))
+                }
             }
         } finally {
             mannequin?.remove()
