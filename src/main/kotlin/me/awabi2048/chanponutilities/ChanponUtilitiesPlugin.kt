@@ -76,10 +76,14 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             val freecam = FreecamSessionService(this, poseCaptureService)
             freecamSessionService = freecam
             server.pluginManager.registerEvents(FreecamListener(this, freecam), this)
-            val command = requireNotNull(getCommand("freecam")) { "freecam command is missing from plugin.yml" }
             val executor = FreecamCommand(freecam)
-            command.setExecutor(executor)
-            command.tabCompleter = executor
+            listOf("freecam", "fcam").forEach { commandName ->
+                val command = requireNotNull(getCommand(commandName)) {
+                    "$commandName command is missing from plugin.yml"
+                }
+                command.setExecutor(executor)
+                command.tabCompleter = executor
+            }
             CCSystem.getAPI().getItemGrantService().register(FreecamItemGrantProvider(this))
         }
 

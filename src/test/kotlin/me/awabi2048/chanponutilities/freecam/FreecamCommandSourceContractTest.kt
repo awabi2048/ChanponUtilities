@@ -14,6 +14,8 @@ class FreecamCommandSourceContractTest {
         val store = Files.readString(Path.of("src/main/kotlin/me/awabi2048/chanponutilities/freecam/FreecamPreferenceStore.kt"))
         val sessionService = Files.readString(Path.of("src/main/kotlin/me/awabi2048/chanponutilities/freecam/FreecamSessionService.kt"))
         val gsitCapture = Files.readString(Path.of("src/main/kotlin/me/awabi2048/chanponutilities/freecam/GSitPoseCaptureService.kt"))
+        val plugin = Files.readString(Path.of("src/main/kotlin/me/awabi2048/chanponutilities/ChanponUtilitiesPlugin.kt"))
+        val pluginYaml = Files.readString(Path.of("src/main/resources/plugin.yml"))
 
         assertTrue(command.contains("toggle_shortcut"))
         assertTrue(command.contains("reset_distance"))
@@ -28,6 +30,8 @@ class FreecamCommandSourceContractTest {
         assertTrue(gsitCapture.contains("requiresSeatMount = true"))
         assertTrue(sessionService.contains("seatMount.addPassenger(mannequin)"))
         assertTrue(sessionService.contains("seatMount?.remove()"))
+        assertTrue(plugin.contains("listOf(\"freecam\", \"fcam\")"))
+        assertTrue(pluginYaml.contains("\n  fcam:\n"))
         assertFalse(command.contains("ショートカット"), "翻訳済みコマンド応答をKotlinへ直書きしないこと")
     }
 }

@@ -12,7 +12,10 @@ commands:
   freecam:
     description: FreeCamを開始または終了します
     usage: /freecam [start|stop|status|toggle_shortcut|reset_distance]
-    aliases: [fcam]
+    permission: chanponutilities.freecam
+  fcam:
+    description: FreeCamコマンドの短縮形
+    usage: /fcam [start|stop|status|toggle_shortcut|reset_distance]
     permission: chanponutilities.freecam
 
 permissions:
