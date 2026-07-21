@@ -43,6 +43,22 @@ class FreecamPreferenceStore(plugin: JavaPlugin) {
         return resetDistance(playerId)
     }
 
+    @Synchronized
+    fun shouldShowStartMessage(
+        playerId: UUID,
+        nowMillis: Long = System.currentTimeMillis(),
+        cooldownMillis: Long = 5 * 60 * 1000L
+    ): Boolean {
+        val path = "players.$playerId.last_start_message_at"
+        val lastShownAt = yaml.getLong(path).takeIf { yaml.contains(path) }
+        if (!shouldShowFreecamStartMessage(lastShownAt, nowMillis, cooldownMillis)) {
+            return false
+        }
+        yaml.set(path, nowMillis)
+        persist()
+        return true
+    }
+
     private fun persist() {
         file.parentFile.mkdirs()
         yaml.save(file)
