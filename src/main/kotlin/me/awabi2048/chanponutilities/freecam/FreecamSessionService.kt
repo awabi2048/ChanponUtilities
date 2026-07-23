@@ -4,6 +4,7 @@ import io.papermc.paper.datacomponent.item.ResolvableProfile
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.util.ChanponI18n
 import org.bukkit.GameMode
+import org.bukkit.Bukkit
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Mannequin
 import org.bukkit.entity.Player
@@ -37,6 +38,7 @@ class FreecamSessionService(
     fun start(player: Player, startMode: FreecamStartMode = FreecamStartMode.CURRENT_POSITION): Boolean {
         if (!plugin.config.getBoolean("features.freecam.enabled", true) || isActive(player.uniqueId)) return false
         if (!player.hasPermission("chanponutilities.freecam") || player.isDead || player.gameMode == GameMode.SPECTATOR) return false
+        if (FreecamStartCheckEvent(player).also(Bukkit.getPluginManager()::callEvent).isCancelled) return false
 
         val captured = when (val result = poseCaptureService.capture(player)) {
             is FreecamPoseCaptureResult.Success -> result.captured
