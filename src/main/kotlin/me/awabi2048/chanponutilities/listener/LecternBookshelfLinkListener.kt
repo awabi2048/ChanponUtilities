@@ -63,6 +63,18 @@ class LecternBookshelfLinkListener(
         }
 
         val clicked = event.clickedBlock ?: return
+        if (clicked.type == Material.LECTERN && event.player.isSneaking) {
+            if (!event.player.hasPermission(PERMISSION_READ)) {
+                return
+            }
+            val lecternState = clicked.state as? Lectern ?: return
+            val rawBook = lecternState.inventory.getItem(0)?.takeUnless { it.type.isAir } ?: return
+            val bookToOpen = displayBook(rawBook, event.player.name) ?: return
+            event.player.openBook(bookToOpen)
+            event.player.playSound(event.player.location, "minecraft:item.book.page_turn", 1.0f, 1.0f)
+            event.isCancelled = true
+            return
+        }
         if (clicked.type != Material.BOOKSHELF) {
             return
         }
@@ -88,24 +100,28 @@ class LecternBookshelfLinkListener(
 
         val lecternState = lecternBlock.state as? Lectern ?: return
         val rawBook = lecternState.inventory.getItem(0)?.takeUnless { it.type.isAir } ?: return
-        val bookToOpen = when (rawBook.type) {
+        val bookToOpen = displayBook(rawBook, event.player.name) ?: return
+        event.player.openBook(bookToOpen)
+        event.player.playSound(event.player.location, "minecraft:item.book.page_turn", 1.0f, 1.0f)
+        event.isCancelled = true
+    }
+
+    private fun displayBook(rawBook: ItemStack, readerName: String): ItemStack? {
+        return when (rawBook.type) {
             Material.WRITTEN_BOOK -> rawBook.clone()
             Material.WRITABLE_BOOK -> {
-                val meta = rawBook.itemMeta as? BookMeta ?: return
+                val meta = rawBook.itemMeta as? BookMeta ?: return null
                 val pages = meta.pages()
                 val written = ItemStack(Material.WRITTEN_BOOK)
-                val writtenMeta = written.itemMeta as? BookMeta ?: return
+                val writtenMeta = written.itemMeta as? BookMeta ?: return null
                 writtenMeta.title = "\uD83D\uDCDD"
-                writtenMeta.author = event.player.name
+                writtenMeta.author = readerName
                 writtenMeta.pages(pages)
                 written.itemMeta = writtenMeta
                 written
             }
-            else -> return
+            else -> null
         }
-        event.player.openBook(bookToOpen)
-        event.player.playSound(event.player.location, "minecraft:item.book.page_turn", 1.0f, 1.0f)
-        event.isCancelled = true
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
