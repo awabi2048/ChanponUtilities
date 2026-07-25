@@ -17,6 +17,10 @@ commands:
     description: FreeCamコマンドの短縮形
     usage: /fcam [start|stop|status|toggle_shortcut|reset_distance]
     permission: chanponutilities.freecam
+  anzen:
+    description: 観光用の安全機能を切り替えます
+    usage: /anzen
+    permission: chanponutilities.anzen
 
 permissions:
   chanponutilities.admin:
@@ -34,4 +38,7 @@ permissions:
     default: true
   chanponutilities.freecam:
     description: FreeCamを使用する権限
+    default: true
+  chanponutilities.anzen:
+    description: 観光用の安全機能を使用する権限
     default: true

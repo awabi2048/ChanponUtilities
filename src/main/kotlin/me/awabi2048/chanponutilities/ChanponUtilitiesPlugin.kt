@@ -9,6 +9,10 @@ import me.awabi2048.chanponutilities.freecam.FreecamSessionService
 import me.awabi2048.chanponutilities.freecam.GSitPoseCaptureService
 import me.awabi2048.chanponutilities.freecam.StandingPoseCaptureService
 import me.awabi2048.chanponutilities.listener.LecternBookshelfLinkListener
+import me.awabi2048.chanponutilities.safety.TourSafetyCommand
+import me.awabi2048.chanponutilities.safety.TourSafetyListener
+import me.awabi2048.chanponutilities.safety.TourSafetyPreferenceStore
+import me.awabi2048.chanponutilities.safety.TourSafetyService
 import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
 import org.bukkit.plugin.java.JavaPlugin
 
@@ -17,6 +21,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         private set
     private var myWorldManagerIntegration: AutoCloseable? = null
     private var freecamSessionService: FreecamSessionService? = null
+    private var tourSafetyService: TourSafetyService? = null
 
     override fun onEnable() {
         CCSystem.getAPI().getConfigSchemaService().register(
@@ -92,6 +97,13 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
         server.pluginManager.registerEvents(LecternBookshelfLinkListener(this, linkStore), this)
 
+        val safetyService = TourSafetyService(this, TourSafetyPreferenceStore(this))
+        tourSafetyService = safetyService
+        server.pluginManager.registerEvents(TourSafetyListener(safetyService), this)
+        requireNotNull(getCommand("anzen")) { "anzen command is missing from plugin.yml" }
+            .setExecutor(TourSafetyCommand(safetyService))
+        server.onlinePlayers.forEach(safetyService::synchronize)
+
         if (server.pluginManager.isPluginEnabled("MyWorldManager")) {
             // MWM型は専用クラスへ隔離し、任意依存がない環境でメインクラスの解決に失敗させない。
             myWorldManagerIntegration = MyWorldManagerIntegration.enable(this)
@@ -105,6 +117,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     override fun onDisable() {
         freecamSessionService?.shutdown()
         freecamSessionService = null
+        tourSafetyService?.let { service -> server.onlinePlayers.forEach(service::clear) }
+        tourSafetyService = null
         runCatching { CCSystem.getAPI().getItemGrantService().unregister("chanpon-utilities") }
         runCatching { CCSystem.getAPI().getConfigSchemaService().unregister("chanpon-utilities") }
         myWorldManagerIntegration?.close()
