@@ -13,10 +13,6 @@ commands:
     description: FreeCamを開始または終了します
     usage: /freecam [start|stop|status|toggle_shortcut|reset_distance]
     permission: chanponutilities.freecam
-  fcam:
-    description: FreeCamコマンドの短縮形
-    usage: /fcam [start|stop|status|toggle_shortcut|reset_distance]
-    permission: chanponutilities.freecam
   anzen:
     description: 観光用の安全機能を切り替えます
     usage: /anzen

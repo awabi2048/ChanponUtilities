@@ -32,7 +32,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     sourcePlugin = this,
                     resourcePath = "config.yml",
                     targetPath = dataFolder.resolve("config.yml").toPath(),
-                    currentVersion = 4,
+                    currentVersion = 5,
                     classification = com.awabi2048.ccsystem.api.config.ConfigClassification.MANAGED_CONFIG,
                     migrations = mapOf(1 to com.awabi2048.ccsystem.api.config.ConfigMigration { config ->
                         config.set("features.freecam.enabled", config.getBoolean("features.freecam.enabled", true))
@@ -51,6 +51,13 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     },
                     3 to com.awabi2048.ccsystem.api.config.ConfigMigration { config ->
                         config.set("features.freecam.reset_distance_default", 128)
+                    },
+                    4 to com.awabi2048.ccsystem.api.config.ConfigMigration { config ->
+                        config.set(
+                            "features.freecam.restrictions.allowed_commands",
+                            config.getStringList("features.freecam.restrictions.allowed_commands")
+                                .filterNot { it.equals("fcam", ignoreCase = true) },
+                        )
                     }),
                     validator = com.awabi2048.ccsystem.api.config.ConfigValidator { config ->
                         require(config.get("features.freecam.enabled") is Boolean) { "features.freecam.enabled must be boolean" }
@@ -82,7 +89,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             freecamSessionService = freecam
             server.pluginManager.registerEvents(FreecamListener(this, freecam), this)
             val executor = FreecamCommand(freecam)
-            listOf("freecam", "fcam").forEach { commandName ->
+            listOf("freecam").forEach { commandName ->
                 val command = requireNotNull(getCommand(commandName)) {
                     "$commandName command is missing from plugin.yml"
                 }

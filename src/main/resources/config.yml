@@ -14,7 +14,6 @@ features:
     restrictions:
       allowed_commands:
         - freecam
-        - fcam
         - msg
         - reply
 
