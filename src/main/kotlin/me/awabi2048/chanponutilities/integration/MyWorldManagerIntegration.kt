@@ -16,9 +16,16 @@ class MyWorldManagerIntegration private constructor(
     companion object {
         fun enable(plugin: ChanponUtilitiesPlugin): MyWorldManagerIntegration {
             val policy = ChanponPlayerStatePolicy()
-            MyWorldManagerApi.registerWorldPlayerStatePolicy(policy)
-            plugin.server.pluginManager.registerEvents(PlayerStatePolicyListener(plugin), plugin)
-            return MyWorldManagerIntegration(policy)
+            return try {
+                MyWorldManagerApi.registerWorldPlayerStatePolicy(policy)
+                plugin.server.pluginManager.registerEvents(PlayerStatePolicyListener(plugin), plugin)
+                MyWorldManagerIntegration(policy)
+            } catch (failure: Throwable) {
+                // API登録後のイベント登録失敗でも、外部にポリシーだけを残さない。
+                runCatching { MyWorldManagerApi.unregisterWorldPlayerStatePolicy(policy) }
+                    .onFailure(failure::addSuppressed)
+                throw failure
+            }
         }
     }
 }

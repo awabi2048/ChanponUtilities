@@ -8,6 +8,7 @@ import org.bukkit.Color
 import org.bukkit.Material
 import org.bukkit.block.Block
 import org.bukkit.block.Lectern
+import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
@@ -17,6 +18,7 @@ import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.LecternInventory
 import org.bukkit.inventory.meta.BookMeta
 
 
@@ -63,8 +65,20 @@ class LecternBookshelfLinkListener(
         }
 
         val clicked = event.clickedBlock ?: return
-        if (clicked.type == Material.LECTERN && event.player.isSneaking) {
+        if (clicked.type == Material.LECTERN && shouldUseLecternSneakRead(
+                isSneaking = event.player.isSneaking,
+                handEmpty = event.item == null || event.item!!.type.isAir,
+                requireEmptyHand = plugin.config.getBoolean(
+                    "features.lectern_bookshelf_link.sneak_read.require_empty_hand",
+                    true,
+                ),
+                reverse = plugin.config.getBoolean("features.lectern_bookshelf_link.sneak_read.reverse", false),
+            )
+        ) {
             if (!event.player.hasPermission(PERMISSION_READ)) {
+                return
+            }
+            if (!hasOtherReader(clicked, event.player)) {
                 return
             }
             val lecternState = clicked.state as? Lectern ?: return
@@ -137,8 +151,17 @@ class LecternBookshelfLinkListener(
     }
 
     private fun isFeatureEnabled(): Boolean {
-        return plugin.config.getBoolean("features.lectern_bookshelf_link.enabled", true)
+        return plugin.isModuleEnabled(me.awabi2048.chanponutilities.module.ChanponModule.LECTERN_BOOKSHELF_LINK)
     }
+
+    private fun hasOtherReader(lectern: Block, current: Player): Boolean =
+        plugin.server.onlinePlayers.any { player ->
+            if (player == current) return@any false
+            val inventory = player.openInventory.topInventory
+            if (inventory !is LecternInventory) return@any false
+            val holder = inventory.holder ?: return@any false
+            holder.block.location == lectern.location
+        }
 
     private fun playLinkSuccessEffects(bookshelfBlock: Block, lecternBlock: Block) {
         if (!plugin.config.getBoolean("effects.link_success.enabled", true)) {

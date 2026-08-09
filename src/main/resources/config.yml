@@ -1,6 +1,9 @@
 features:
   lectern_bookshelf_link:
     enabled: true
+    sneak_read:
+      require_empty_hand: true
+      reverse: false
   freecam:
     enabled: true
     reset_distance_default: 128
@@ -16,6 +19,10 @@ features:
         - freecam
         - msg
         - reply
+  tour_safety:
+    enabled: true
+  player_state:
+    enabled: true
 
 effects:
   link_success:
@@ -37,4 +44,4 @@ effects:
       key: minecraft:entity.experience_orb.pickup
       volume: 1.0
       pitch: 2.0
-config_version: 4
+config_version: 6

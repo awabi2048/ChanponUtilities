@@ -1,5 +1,8 @@
 package me.awabi2048.chanponutilities.safety
 
+import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
+import me.awabi2048.chanponutilities.listener.shouldUseLecternSneakRead
+import me.awabi2048.chanponutilities.module.ChanponModule
 import org.bukkit.Material
 import org.bukkit.block.Lectern
 import org.bukkit.entity.Player
@@ -8,6 +11,7 @@ import org.bukkit.event.Cancellable
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.block.Action
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.entity.EntityDamageByEntityEvent
@@ -31,9 +35,11 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.event.player.PlayerShearEntityEvent
 import org.bukkit.event.player.PlayerTakeLecternBookEvent
+import org.bukkit.inventory.EquipmentSlot
 
 class TourSafetyListener(
-    private val service: TourSafetyService
+    private val plugin: ChanponUtilitiesPlugin,
+    private val service: TourSafetyService,
 ) : Listener {
     @EventHandler fun onJoin(event: PlayerJoinEvent) = service.synchronize(event.player)
     @EventHandler fun onWorldChanged(event: PlayerChangedWorldEvent) = service.synchronize(event.player)
@@ -44,11 +50,24 @@ class TourSafetyListener(
         if (!service.isEnabled(event.player)) return
         val clicked = event.clickedBlock
         if (
-            event.player.isSneaking &&
             clicked?.type == Material.LECTERN &&
             (clicked.state as? Lectern)?.inventory?.getItem(0)?.type in setOf(Material.WRITTEN_BOOK, Material.WRITABLE_BOOK)
         ) {
-            return
+            val handEmpty = event.item == null || event.item!!.type.isAir
+            val featureMode = event.action == Action.RIGHT_CLICK_BLOCK &&
+                event.hand == EquipmentSlot.HAND &&
+                plugin.isModuleEnabled(ChanponModule.LECTERN_BOOKSHELF_LINK) &&
+                event.player.hasPermission("chanponutilities.read") &&
+                shouldUseLecternSneakRead(
+                    isSneaking = event.player.isSneaking,
+                    handEmpty = handEmpty,
+                    requireEmptyHand = plugin.config.getBoolean(
+                        "features.lectern_bookshelf_link.sneak_read.require_empty_hand",
+                        true,
+                    ),
+                    reverse = plugin.config.getBoolean("features.lectern_bookshelf_link.sneak_read.reverse", false),
+                )
+            if (featureMode) return
         }
         reject(event.player, event)
     }

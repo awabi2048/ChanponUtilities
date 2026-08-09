@@ -9,6 +9,10 @@ softdepend:
   - GSit
 
 commands:
+  cu:
+    description: Chanpon-Utilitiesのサーバー全体機能を管理します
+    usage: /cu <status|enable|disable> [module]
+    permission: chanponutilities.admin
   freecam:
     description: FreeCamを開始または終了します
     usage: /freecam [start|stop|status|toggle_shortcut|reset_distance]

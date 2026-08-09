@@ -1,5 +1,6 @@
 package me.awabi2048.chanponutilities.freecam
 
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.util.ChanponI18n
@@ -19,6 +20,7 @@ class FreecamSessionService(
     private val poseCaptureService: FreecamPoseCaptureService
 ) {
     private val sessions = ConcurrentHashMap<UUID, FreecamSession>()
+    private val monitorTasks = ConcurrentHashMap<UUID, ScheduledTask>()
     private val internalTeleports = ConcurrentHashMap.newKeySet<UUID>()
     private val recovery = FreecamRecoveryStore(plugin)
     private val preferences = FreecamPreferenceStore(plugin)
@@ -106,7 +108,11 @@ class FreecamSessionService(
         notify: Boolean = true,
         finalCameraPosition: org.bukkit.Location? = null
     ): Boolean {
-        val session = sessions.remove(playerId) ?: return false
+        val session = sessions.remove(playerId) ?: run {
+            monitorTasks.remove(playerId)?.cancel()
+            return false
+        }
+        monitorTasks.remove(playerId)?.cancel()
         val player = plugin.server.getPlayer(playerId)
         val mannequin = plugin.server.getEntity(session.mannequinId) as? Mannequin
         val seatMount = session.seatMountId?.let(plugin.server::getEntity)
@@ -148,6 +154,8 @@ class FreecamSessionService(
 
     fun shutdown() {
         sessions.keys.toList().forEach { stop(it, FreecamExitReason.PLUGIN_DISABLE, false) }
+        monitorTasks.values.forEach { it.cancel() }
+        monitorTasks.clear()
         internalTeleports.clear()
     }
 
@@ -200,13 +208,18 @@ class FreecamSessionService(
         }
 
     private fun scheduleMonitor(player: Player) {
-        player.scheduler.runAtFixedRate(plugin, { _ ->
+        monitorTasks.remove(player.uniqueId)?.cancel()
+        val task = player.scheduler.runAtFixedRate(plugin, { _ ->
             val session = sessions[player.uniqueId] ?: return@runAtFixedRate
             if (player.gameMode != GameMode.SPECTATOR) stop(player.uniqueId, FreecamExitReason.GAME_MODE_CHANGED)
             else if (plugin.server.getEntity(session.mannequinId)?.isValid != true ||
                 (session.seatMountId != null && plugin.server.getEntity(session.seatMountId)?.isValid != true)
             ) stop(player.uniqueId, FreecamExitReason.BODY_REMOVED)
-        }, { stop(player.uniqueId, FreecamExitReason.INTERNAL_ERROR, false) }, 20L, 20L)
+        }, { stop(player.uniqueId, FreecamExitReason.INTERNAL_ERROR, false) }, 20L, 20L) ?: run {
+            stop(player.uniqueId, FreecamExitReason.INTERNAL_ERROR, false)
+            return
+        }
+        monitorTasks[player.uniqueId] = task
     }
 }
 
