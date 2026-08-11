@@ -1,3 +1,0 @@
-# GUI Actionではなく、安全制御とFreeCam保護のためのInventoryイベントだけを許可する。
-INVENTORY_CLICK_EVENT|2|src/main/kotlin/me/awabi2048/chanponutilities/freecam/FreecamListener.kt
-INVENTORY_CLICK_EVENT|2|src/main/kotlin/me/awabi2048/chanponutilities/safety/TourSafetyListener.kt
