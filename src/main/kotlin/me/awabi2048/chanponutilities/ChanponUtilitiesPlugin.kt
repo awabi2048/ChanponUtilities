@@ -8,6 +8,7 @@ import com.awabi2048.ccsystem.api.config.ManagedConfigSpec
 import me.awabi2048.chanponutilities.command.ChanponManagementCommand
 import me.awabi2048.chanponutilities.command.ChanponModuleUnavailableCommand
 import me.awabi2048.chanponutilities.freecam.FreecamCommand
+import me.awabi2048.chanponutilities.freecam.CCSystemSwapHandInputClaimGate
 import me.awabi2048.chanponutilities.freecam.FreecamItemGrantProvider
 import me.awabi2048.chanponutilities.freecam.FreecamListener
 import me.awabi2048.chanponutilities.freecam.FreecamSessionService
@@ -167,7 +168,16 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             }
             val freecam = FreecamSessionService(this, poseCaptureService)
             freecamSessionService = freecam
-            server.pluginManager.registerEvents(FreecamListener(this, freecam), this)
+            val interactionClaims = CCSystem.getAPI().getPlayerInteractionClaimService()
+            server.pluginManager.registerEvents(
+                FreecamListener(
+                    this,
+                    freecam,
+                    // Gesture GUIなどがFキーを占有している間、Freecamは入力へ一切介入しません。
+                    CCSystemSwapHandInputClaimGate(interactionClaims),
+                ),
+                this,
+            )
             installCommand("freecam", FreecamCommand(freecam))
             CCSystem.getAPI().getItemGrantService().register(FreecamItemGrantProvider(this))
         } else {

@@ -6,4 +6,3 @@ target/
 *.md
 !README.md
 docs/
-src/test/resources/architecture/runtime-ui-legacy-allowlist.txt
