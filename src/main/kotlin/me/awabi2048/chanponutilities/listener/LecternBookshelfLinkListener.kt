@@ -1,5 +1,7 @@
 package me.awabi2048.chanponutilities.listener
 
+import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
+
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.effect.BlockFrameEffectRenderer
 import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
@@ -101,7 +103,7 @@ class LecternBookshelfLinkListener(
         if (event.player.isSneaking) {
             linkStore.unlinkByBookshelf(clicked)
             event.player.playSound(event.player.location, "minecraft:block.wooden_button.click_off", 1.0f, 1.0f)
-            event.player.sendMessage(ChanponI18n.text(event.player, "unlink.success"))
+            event.player.sendMessage(ChanponI18n.text(event.player, Keys.CHANPON_UTILITIES_UNLINK_SUCCESS))
             event.isCancelled = true
             return
         }

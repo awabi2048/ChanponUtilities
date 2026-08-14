@@ -1,5 +1,7 @@
 package me.awabi2048.chanponutilities.freecam
 
+import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
+
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
 import io.papermc.paper.datacomponent.item.ResolvableProfile
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
@@ -89,10 +91,10 @@ class FreecamSessionService(
                 }
             }
             if (previousCameraTooFar) {
-                ChanponI18n.list(player, "freecam.previous_camera_too_far").forEach(player::sendMessage)
+                ChanponI18n.list(player, Keys.CHANPON_UTILITIES_FREECAM_PREVIOUS_CAMERA_TOO_FAR).forEach(player::sendMessage)
             }
             if (preferences.shouldShowStartMessage(player.uniqueId)) {
-                ChanponI18n.list(player, "freecam.started").forEach(player::sendMessage)
+                ChanponI18n.list(player, Keys.CHANPON_UTILITIES_FREECAM_STARTED).forEach(player::sendMessage)
             }
             scheduleMonitor(player)
             true
@@ -125,7 +127,7 @@ class FreecamSessionService(
                 player.isFlying = session.snapshot.flying && session.snapshot.allowFlight
                 player.fallDistance = 0f
                 if (notify && reason == FreecamExitReason.BODY_DAMAGED) {
-                    player.sendMessage(ChanponI18n.text(player, "freecam.body.damaged"))
+                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_BODY_DAMAGED))
                 }
             }
         } finally {
@@ -148,7 +150,7 @@ class FreecamSessionService(
         player.isFlying = entry.flying && entry.allowFlight
         player.fallDistance = 0f
         recovery.remove(player.uniqueId)
-        player.sendMessage(ChanponI18n.text(player, "freecam.recovered"))
+        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_RECOVERED))
         return true
     }
 

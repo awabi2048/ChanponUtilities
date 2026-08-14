@@ -1,5 +1,7 @@
 package me.awabi2048.chanponutilities.safety
 
+import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
+
 import java.util.UUID
 import me.awabi2048.chanponutilities.util.ChanponI18n
 import org.bukkit.NamespacedKey
@@ -22,7 +24,7 @@ class TourSafetyService(
         val enabled = !isEnabled(player)
         preferences.setEnabled(player.uniqueId, enabled)
         synchronize(player)
-        player.sendMessage(ChanponI18n.text(player, if (enabled) "safety.enabled" else "safety.disabled"))
+        player.sendMessage(ChanponI18n.text(player, if (enabled) Keys.CHANPON_UTILITIES_SAFETY_ENABLED else Keys.CHANPON_UTILITIES_SAFETY_DISABLED))
         return enabled
     }
 
@@ -40,7 +42,7 @@ class TourSafetyService(
         val last = lastNoticeAt[player.uniqueId]
         if (shouldShowTourSafetyNotice(last, nowMillis)) {
             lastNoticeAt[player.uniqueId] = nowMillis
-            player.sendMessage(ChanponI18n.text(player, "safety.blocked"))
+            player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_SAFETY_BLOCKED))
         }
     }
 

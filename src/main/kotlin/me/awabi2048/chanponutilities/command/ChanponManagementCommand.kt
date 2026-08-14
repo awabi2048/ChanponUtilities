@@ -1,5 +1,7 @@
 package me.awabi2048.chanponutilities.command
 
+import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
+
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.module.ChanponModule
 import me.awabi2048.chanponutilities.util.ChanponI18n
@@ -19,14 +21,14 @@ class ChanponManagementCommand(
         args: Array<out String>,
     ): Boolean {
         if (!sender.hasPermission(PERMISSION)) {
-            sender.sendMessage(ChanponI18n.text(sender as? Player, "management.no_permission"))
+            sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
             return true
         }
 
         when (args.firstOrNull()?.lowercase()) {
             "status" -> sendStatus(sender)
             "enable", "disable" -> changeModule(sender, args)
-            else -> sender.sendMessage(ChanponI18n.text(sender as? Player, "management.usage"))
+            else -> sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_MANAGEMENT_USAGE))
         }
         return true
     }
@@ -51,15 +53,15 @@ class ChanponManagementCommand(
 
     private fun sendStatus(sender: CommandSender) {
         val player = sender as? Player
-        sender.sendMessage(ChanponI18n.text(player, "management.status.header"))
+        sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_STATUS_HEADER))
         ChanponModule.all.forEach { module ->
             val stateKey = when {
-                plugin.isModuleUnavailable(module) -> "management.state.unavailable"
-                plugin.isModuleEnabled(module) -> "management.state.enabled"
-                else -> "management.state.disabled"
+                plugin.isModuleUnavailable(module) -> Keys.CHANPON_UTILITIES_MANAGEMENT_STATE_UNAVAILABLE
+                plugin.isModuleEnabled(module) -> Keys.CHANPON_UTILITIES_MANAGEMENT_STATE_ENABLED
+                else -> Keys.CHANPON_UTILITIES_MANAGEMENT_STATE_DISABLED
             }
             val state = ChanponI18n.text(player, stateKey)
-            sender.sendMessage(ChanponI18n.text(player, "management.status.entry", "id" to module.id, "state" to state))
+            sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_STATUS_ENTRY, "id" to module.id, "state" to state))
         }
     }
 
@@ -68,7 +70,7 @@ class ChanponManagementCommand(
         val moduleId = args.getOrNull(1)
         val module = moduleId?.let(ChanponModule::find)
         if (module == null) {
-            sender.sendMessage(ChanponI18n.text(player, "management.unknown_module", "id" to (moduleId ?: "")))
+            sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_UNKNOWN_MODULE, "id" to (moduleId ?: "")))
             return
         }
 
@@ -77,9 +79,9 @@ class ChanponManagementCommand(
             sender.sendMessage(
                 ChanponI18n.text(
                     player,
-                    "management.unchanged",
+                    Keys.CHANPON_UTILITIES_MANAGEMENT_UNCHANGED,
                     "id" to module.id,
-                    "state" to ChanponI18n.text(player, if (enabled) "management.state.enabled" else "management.state.disabled"),
+                    "state" to ChanponI18n.text(player, if (enabled) Keys.CHANPON_UTILITIES_MANAGEMENT_STATE_ENABLED else Keys.CHANPON_UTILITIES_MANAGEMENT_STATE_DISABLED),
                 )
             )
             return
@@ -90,15 +92,15 @@ class ChanponManagementCommand(
                 sender.sendMessage(
                     ChanponI18n.text(
                         player,
-                        "management.changed",
+                        Keys.CHANPON_UTILITIES_MANAGEMENT_CHANGED,
                         "id" to module.id,
-                        "state" to ChanponI18n.text(player, if (enabled) "management.state.enabled" else "management.state.disabled"),
+                        "state" to ChanponI18n.text(player, if (enabled) Keys.CHANPON_UTILITIES_MANAGEMENT_STATE_ENABLED else Keys.CHANPON_UTILITIES_MANAGEMENT_STATE_DISABLED),
                     )
                 )
             }
             .onFailure { failure ->
                 plugin.logger.warning("/cu ${if (enabled) "enable" else "disable"} ${module.id} failed: ${failure.message}")
-                sender.sendMessage(ChanponI18n.text(player, "management.failed", "id" to module.id))
+                sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_FAILED, "id" to module.id))
             }
     }
 
@@ -116,7 +118,7 @@ class ChanponModuleUnavailableCommand(
         label: String,
         args: Array<out String>,
     ): Boolean {
-        sender.sendMessage(ChanponI18n.text(sender as? Player, "management.feature_disabled", "id" to module.id))
+        sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_MANAGEMENT_FEATURE_DISABLED, "id" to module.id))
         return true
     }
 
