@@ -1,5 +1,7 @@
 package me.awabi2048.chanponutilities.freecam
 
+import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
+
 import me.awabi2048.chanponutilities.util.ChanponI18n
 import org.bukkit.command.Command
 import org.bukkit.command.CommandExecutor
@@ -12,15 +14,15 @@ class FreecamCommand(private val service: FreecamSessionService) : CommandExecut
         val player = sender as? Player ?: return true
         when (args.firstOrNull()?.lowercase()) {
             null -> if (service.isActive(player.uniqueId)) service.stop(player.uniqueId, FreecamExitReason.MANUAL) else service.start(player)
-            "start" -> if (!service.start(player)) player.sendMessage(ChanponI18n.text(player, "freecam.unavailable"))
-            "stop" -> if (!service.stop(player.uniqueId, FreecamExitReason.MANUAL)) player.sendMessage(ChanponI18n.text(player, "freecam.not_active"))
-            "status" -> player.sendMessage(ChanponI18n.text(player, if (service.isActive(player.uniqueId)) "freecam.status.active" else "freecam.status.inactive"))
+            "start" -> if (!service.start(player)) player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_UNAVAILABLE))
+            "stop" -> if (!service.stop(player.uniqueId, FreecamExitReason.MANUAL)) player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_NOT_ACTIVE))
+            "status" -> player.sendMessage(ChanponI18n.text(player, if (service.isActive(player.uniqueId)) Keys.CHANPON_UTILITIES_FREECAM_STATUS_ACTIVE else Keys.CHANPON_UTILITIES_FREECAM_STATUS_INACTIVE))
             "toggle_shortcut" -> {
                 val enabled = service.toggleShortcut(player.uniqueId)
-                player.sendMessage(ChanponI18n.text(player, if (enabled) "freecam.shortcut.enabled" else "freecam.shortcut.disabled"))
+                player.sendMessage(ChanponI18n.text(player, if (enabled) Keys.CHANPON_UTILITIES_FREECAM_SHORTCUT_ENABLED else Keys.CHANPON_UTILITIES_FREECAM_SHORTCUT_DISABLED))
             }
             "reset_distance" -> handleResetDistance(player, args.getOrNull(1))
-            else -> player.sendMessage(ChanponI18n.text(player, "freecam.usage"))
+            else -> player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_USAGE))
         }
         return true
     }
@@ -28,16 +30,16 @@ class FreecamCommand(private val service: FreecamSessionService) : CommandExecut
     private fun handleResetDistance(player: Player, argument: String?) {
         if (argument.equals("reset", ignoreCase = true)) {
             val distance = service.resetResetDistance(player.uniqueId)
-            player.sendMessage(ChanponI18n.text(player, "freecam.reset_distance.reset", "distance" to distance))
+            player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_RESET_DISTANCE_RESET, "distance" to distance))
             return
         }
         val distance = argument?.toIntOrNull()
         if (distance == null || distance !in 0..30_000_000) {
-            player.sendMessage(ChanponI18n.text(player, "freecam.reset_distance.usage"))
+            player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_RESET_DISTANCE_USAGE))
             return
         }
         service.setResetDistance(player.uniqueId, distance)
-        player.sendMessage(ChanponI18n.text(player, "freecam.reset_distance.changed", "distance" to distance))
+        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_RESET_DISTANCE_CHANGED, "distance" to distance))
     }
 
     override fun onTabComplete(sender: CommandSender, command: Command, alias: String, args: Array<out String>): List<String> = when (args.size) {

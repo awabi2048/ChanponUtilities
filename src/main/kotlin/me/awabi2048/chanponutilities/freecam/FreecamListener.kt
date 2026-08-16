@@ -30,7 +30,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class FreecamListener(
     private val plugin: ChanponUtilitiesPlugin,
-    private val service: FreecamSessionService
+    private val service: FreecamSessionService,
+    private val swapHandInputClaimGate: SwapHandInputClaimGate,
 ) : Listener {
     private val fPresses = DoublePressTracker()
     private val shiftPresses = DoublePressTracker()
@@ -44,6 +45,8 @@ class FreecamListener(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onSwap(event: PlayerSwapHandItemsEvent) {
         val player = event.player
+        // 入力claim中はキャンセルや二度押し記録も行わず、入力をCC-Systemへ完全に譲ります。
+        if (swapHandInputClaimGate.isClaimed(player.uniqueId)) return
         if (player.isSneaking) {
             fPresses.clear(player.uniqueId)
             return

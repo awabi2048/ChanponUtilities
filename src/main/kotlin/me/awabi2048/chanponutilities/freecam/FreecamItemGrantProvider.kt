@@ -1,5 +1,7 @@
 package me.awabi2048.chanponutilities.freecam
 
+import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
+
 import com.awabi2048.ccsystem.api.item.ItemArgumentSuggestionProvider
 import com.awabi2048.ccsystem.api.item.ItemGrantDefinition
 import com.awabi2048.ccsystem.api.item.ItemGrantProvider
@@ -40,8 +42,8 @@ class FreecamItemGrantProvider(private val plugin: ChanponUtilitiesPlugin) : Ite
         val material = Material.matchMaterial(plugin.config.getString("features.freecam.activation.item.material", "ENDER_EYE") ?: "ENDER_EYE") ?: Material.ENDER_EYE
         val item = ItemStack(material, amount)
         val meta = item.itemMeta
-        meta.displayName(Component.text(ChanponI18n.text(player, "freecam.item.name")).decoration(TextDecoration.ITALIC, false))
-        meta.lore(listOf(Component.text(ChanponI18n.text(player, "freecam.item.lore")).decoration(TextDecoration.ITALIC, false)))
+        meta.displayName(Component.text(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_ITEM_NAME)).decoration(TextDecoration.ITALIC, false))
+        meta.lore(listOf(Component.text(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_ITEM_LORE)).decoration(TextDecoration.ITALIC, false)))
         meta.persistentDataContainer.set(NamespacedKey(plugin, "freecam_activator"), PersistentDataType.BYTE, 1)
         item.itemMeta = meta
         return item
