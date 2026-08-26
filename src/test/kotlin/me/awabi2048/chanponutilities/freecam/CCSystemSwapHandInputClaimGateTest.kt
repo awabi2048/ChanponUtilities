@@ -4,7 +4,9 @@ import com.awabi2048.ccsystem.api.input.PlayerInteractionChannel
 import com.awabi2048.ccsystem.api.input.PlayerInteractionClaim
 import com.awabi2048.ccsystem.api.input.PlayerInteractionClaimService
 import java.util.UUID
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -17,9 +19,11 @@ class CCSystemSwapHandInputClaimGateTest {
 
         service.claim(playerId, PlayerInteractionChannel.PRIMARY, "other")
         assertFalse(gate.isClaimed(playerId))
+        assertNull(gate.ownerOf(playerId))
 
         service.claim(playerId, PlayerInteractionChannel.SWAP_HAND, "gesture-gui")
         assertTrue(gate.isClaimed(playerId))
+        assertEquals("gesture-gui", gate.ownerOf(playerId))
     }
 
     private class FakeClaimService : PlayerInteractionClaimService {
