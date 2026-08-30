@@ -46,12 +46,6 @@ class FreecamListener(
     fun onSwap(event: PlayerSwapHandItemsEvent) {
         val player = event.player
         val claimedBy = swapHandInputClaimGate.ownerOf(player.uniqueId)
-        // TODO(診断用): ショートカット不発の切り分けのため一時的に全押下をINFO出力する。原因特定後に除去する。
-        plugin.logger.info(
-            "[freecam-diag] swap player=${player.name} sneaking=${player.isSneaking} " +
-                "mainHand=${player.inventory.itemInMainHand.type} offHand=${player.inventory.itemInOffHand.type} " +
-                "claimedBy=$claimedBy shortcutEnabled=${service.isShortcutEnabled(player.uniqueId)} active=${service.isActive(player.uniqueId)}"
-        )
         val disposition = resolveFreecamSwapDisposition(
             // 入力claim中はキャンセルや二度押し記録も行わず、入力をCC-Systemへ完全に譲ります。
             inputClaimed = claimedBy != null,
@@ -60,8 +54,6 @@ class FreecamListener(
             mainHandEmpty = player.inventory.itemInMainHand.type.isAir,
             offHandEmpty = player.inventory.itemInOffHand.type.isAir,
         )
-        // TODO(診断用): 判定結果も併せて出力する。
-        plugin.logger.info("[freecam-diag] disposition=$disposition")
         when (disposition) {
             FreecamSwapDisposition.HAND_OVER -> return
             FreecamSwapDisposition.SNEAKING_RESET -> {
@@ -75,7 +67,6 @@ class FreecamListener(
         event.isCancelled = true
         val now = System.currentTimeMillis()
         if (fPresses.press(player.uniqueId, now, actionWindow())) {
-            plugin.logger.info("[freecam-diag] double press detected, starting freecam")
             service.start(player, FreecamStartMode.PREVIOUS_CAMERA_POSITION)
         }
     }
