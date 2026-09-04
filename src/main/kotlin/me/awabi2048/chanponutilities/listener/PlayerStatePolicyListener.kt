@@ -41,6 +41,8 @@ class PlayerStatePolicyListener(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onGameModeChange(event: PlayerGameModeChangeEvent) {
+        // ゲームモードの変更はポリシーで上書きしません。変更後の現在モードを基準に、
+        // 建築・飛行制約だけを再評価するために同期します。
         if (event.newGameMode == GameMode.SPECTATOR) return
         org.bukkit.Bukkit.getScheduler().runTask(
             plugin,

@@ -3,7 +3,6 @@ package me.awabi2048.chanponutilities.policy
 import me.awabi2048.myworldmanager.api.extension.WorldPlayerStateDecision
 import me.awabi2048.myworldmanager.api.extension.WorldPlayerStatePolicy
 import me.awabi2048.myworldmanager.model.WorldData
-import org.bukkit.GameMode
 import org.bukkit.entity.Player
 
 class ChanponPlayerStatePolicy : WorldPlayerStatePolicy {
@@ -14,8 +13,8 @@ class ChanponPlayerStatePolicy : WorldPlayerStatePolicy {
     override fun evaluate(player: Player, worldData: WorldData): WorldPlayerStateDecision {
         val admin = isAdmin(player)
         val builder = ChanponPlayerStateRules.isBuilder(player.uniqueId, worldData.owner, worldData.members, admin)
+        // ワールドポリシーは建築・飛行制約だけを返し、ゲームモードは変更しません。
         return WorldPlayerStateDecision(
-            gameMode = ChanponPlayerStateRules.gameModeForBuilder(builder, admin),
             buildAllowed = builder,
             flightAllowed = ChanponPlayerStateRules.flightAllowed(worldData.allowFlight, builder, admin)
         )

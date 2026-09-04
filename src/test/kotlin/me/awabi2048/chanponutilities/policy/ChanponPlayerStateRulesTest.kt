@@ -2,9 +2,7 @@ package me.awabi2048.chanponutilities.policy
 
 import java.util.UUID
 import org.bukkit.GameMode
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -21,18 +19,17 @@ class ChanponPlayerStateRulesTest {
     }
 
     @Test
-    fun `admin bypasses build and game mode assignment`() {
+    fun `admin bypasses build restriction and follows flight policy`() {
         assertTrue(ChanponPlayerStateRules.isBuilder(guest, owner, emptyList(), admin = true))
-        assertNull(ChanponPlayerStateRules.gameModeForBuilder(builder = true, admin = true))
         assertTrue(ChanponPlayerStateRules.flightAllowed(true, builder = true, admin = true))
         assertFalse(ChanponPlayerStateRules.flightAllowed(false, builder = true, admin = true))
     }
 
     @Test
-    fun `ordinary builders use survival and guests use adventure`() {
-        assertEquals(GameMode.SURVIVAL, ChanponPlayerStateRules.gameModeForBuilder(true, admin = false))
-        assertEquals(GameMode.ADVENTURE, ChanponPlayerStateRules.gameModeForBuilder(false, admin = false))
+    fun `only builders receive world flight permission`() {
+        assertTrue(ChanponPlayerStateRules.flightAllowed(true, builder = true, admin = false))
         assertFalse(ChanponPlayerStateRules.flightAllowed(true, builder = false, admin = false))
+        assertFalse(ChanponPlayerStateRules.flightAllowed(false, builder = true, admin = false))
     }
 
     @Test
