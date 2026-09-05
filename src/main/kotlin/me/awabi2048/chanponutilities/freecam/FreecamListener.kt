@@ -45,13 +45,25 @@ class FreecamListener(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onSwap(event: PlayerSwapHandItemsEvent) {
         val player = event.player
-        // 入力claim中はキャンセルや二度押し記録も行わず、入力をCC-Systemへ完全に譲ります。
-        if (swapHandInputClaimGate.isClaimed(player.uniqueId)) return
-        if (player.isSneaking) {
-            fPresses.clear(player.uniqueId)
-            return
+        val claimedBy = swapHandInputClaimGate.ownerOf(player.uniqueId)
+        val disposition = resolveFreecamSwapDisposition(
+            // 入力claim中はキャンセルや二度押し記録も行わず、入力をCC-Systemへ完全に譲ります。
+            inputClaimed = claimedBy != null,
+            sneaking = player.isSneaking,
+            shortcutAvailable = actionsEnabled() && service.isShortcutEnabled(player.uniqueId) && !service.isActive(player.uniqueId),
+            mainHandEmpty = player.inventory.itemInMainHand.type.isAir,
+            offHandEmpty = player.inventory.itemInOffHand.type.isAir,
+        )
+        when (disposition) {
+            FreecamSwapDisposition.HAND_OVER -> return
+            FreecamSwapDisposition.SNEAKING_RESET -> {
+                fPresses.clear(player.uniqueId)
+                return
+            }
+            FreecamSwapDisposition.IGNORE,
+            FreecamSwapDisposition.NOT_EMPTY_HANDED -> return
+            FreecamSwapDisposition.TRACK_PRESS -> {}
         }
-        if (!actionsEnabled() || !service.isShortcutEnabled(player.uniqueId) || service.isActive(player.uniqueId)) return
         event.isCancelled = true
         val now = System.currentTimeMillis()
         if (fPresses.press(player.uniqueId, now, actionWindow())) {

@@ -1,5 +1,6 @@
 package me.awabi2048.chanponutilities.freecam
 
+import com.awabi2048.ccsystem.CCSystem
 import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
 
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask
@@ -167,6 +168,9 @@ class FreecamSessionService(
         return try {
             val mannequin = snapshot.anchor.world.spawn(snapshot.anchor, Mannequin::class.java)
             spawnedMannequin = mannequin
+            // FreeCamの身体は一時的なシステムEntityです。共通台帳へ登録して、
+            // KantanCommander等の管理コマンドからプレイヤーの身体として操作されないようにします。
+            CCSystem.getAPI().getSystemEntityRegistry().mark(mannequin, plugin)
             mannequin.profile = ResolvableProfile.resolvableProfile(player.playerProfile)
             mannequin.mainHand = player.mainHand
             mannequin.isImmovable = true
@@ -197,6 +201,8 @@ class FreecamSessionService(
 
     private fun spawnSeatMount(snapshot: BodySnapshot): ArmorStand =
         snapshot.anchor.world.spawn(snapshot.anchor, ArmorStand::class.java) { mount ->
+            // 座席もFreeCam本体の一部なので、表示用Mannequinと同じ保護対象にします。
+            CCSystem.getAPI().getSystemEntityRegistry().mark(mount, plugin)
             mount.isVisible = false
             mount.isMarker = true
             mount.isSmall = true
