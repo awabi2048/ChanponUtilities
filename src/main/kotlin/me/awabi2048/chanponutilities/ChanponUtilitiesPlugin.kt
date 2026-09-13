@@ -159,6 +159,11 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                                 )
                             }
                         },
+                        7 to ConfigMigration { config ->
+                            if (!config.contains(ChanponModule.COMMAND_SAFEGUARD.enabledConfigPath)) {
+                                config.set(ChanponModule.COMMAND_SAFEGUARD.enabledConfigPath, true)
+                            }
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -171,11 +176,14 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         reloadConfig()
         moduleState = loadModuleState()
 
-        // コマンドセーフガードは権限設定に左右されない常設の安全境界です。
-        // 個別モジュールの有効・無効に含めず、他機能が無効でも必ず受付へ登録します。
-        val commandSafeguard = CommandSafeguardService(this)
-        commandSafeguardService = commandSafeguard
-        server.pluginManager.registerEvents(CommandSafeguardListener(commandSafeguard), this)
+        // 有効化中は権限設定に左右されない安全境界として動作しますが、登録状態は
+        // ChanponModule に統一します。これにより /cu status と enable/disable の表示・
+        // 設定保存・ライフサイクル再構築が同じ状態を参照できます。
+        if (isModuleEnabled(ChanponModule.COMMAND_SAFEGUARD)) {
+            val commandSafeguard = CommandSafeguardService(this)
+            commandSafeguardService = commandSafeguard
+            server.pluginManager.registerEvents(CommandSafeguardListener(commandSafeguard), this)
+        }
 
         if (isModuleEnabled(ChanponModule.FREECAM)) {
             val poseCaptureService = if (server.pluginManager.isPluginEnabled("GSit")) {
@@ -371,7 +379,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 7
+        const val CONFIG_VERSION = 8
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }

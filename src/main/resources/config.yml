@@ -23,6 +23,8 @@ features:
     enabled: true
   player_state:
     enabled: true
+  command_safeguard:
+    enabled: true
 
 effects:
   link_success:
