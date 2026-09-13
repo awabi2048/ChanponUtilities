@@ -22,6 +22,8 @@ import me.awabi2048.chanponutilities.safety.TourSafetyCommand
 import me.awabi2048.chanponutilities.safety.TourSafetyListener
 import me.awabi2048.chanponutilities.safety.TourSafetyPreferenceStore
 import me.awabi2048.chanponutilities.safety.TourSafetyService
+import me.awabi2048.chanponutilities.safety.CommandSafeguardListener
+import me.awabi2048.chanponutilities.safety.CommandSafeguardService
 import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
 import org.bukkit.Bukkit
 import org.bukkit.configuration.file.YamlConfiguration
@@ -37,6 +39,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     private var myWorldManagerIntegration: AutoCloseable? = null
     private var freecamSessionService: FreecamSessionService? = null
     private var tourSafetyService: TourSafetyService? = null
+    private var commandSafeguardService: CommandSafeguardService? = null
     private var moduleState: ChanponModuleState = ChanponModuleState.defaults()
 
     override fun onEnable() {
@@ -160,6 +163,12 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         reloadConfig()
         moduleState = loadModuleState()
 
+        // コマンドセーフガードは権限設定に左右されない常設の安全境界です。
+        // 個別モジュールの有効・無効に含めず、他機能が無効でも必ず受付へ登録します。
+        val commandSafeguard = CommandSafeguardService(this)
+        commandSafeguardService = commandSafeguard
+        server.pluginManager.registerEvents(CommandSafeguardListener(commandSafeguard), this)
+
         if (isModuleEnabled(ChanponModule.FREECAM)) {
             val poseCaptureService = if (server.pluginManager.isPluginEnabled("GSit")) {
                 GSitPoseCaptureService()
@@ -213,6 +222,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         lifecycleActive = false
         HandlerList.unregisterAll(this)
         server.scheduler.cancelTasks(this)
+        commandSafeguardService?.shutdown()
+        commandSafeguardService = null
         freecamSessionService?.shutdown()
         freecamSessionService = null
         tourSafetyService?.let { service -> server.onlinePlayers.forEach(service::clear) }
