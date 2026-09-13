@@ -19,7 +19,6 @@ import org.bukkit.Bukkit
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.scheduler.BukkitTask
-import java.util.Locale
 import java.util.UUID
 
 /**
@@ -35,6 +34,11 @@ internal class CommandSafeguardService(
     private val pendingByPlayer = mutableMapOf<UUID, PendingConfirmation>()
     private val soundTasksByPlayer = mutableMapOf<UUID, BukkitTask>()
     private val approvedCommandsByPlayer = mutableMapOf<UUID, String>()
+    private val blacklistedCommands = plugin.config
+        .getStringList(BLACKLIST_CONFIG_PATH)
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .toSet()
 
     /**
      * コマンドを捕捉し、確認対象ならtrueを返します。
@@ -53,15 +57,13 @@ internal class CommandSafeguardService(
         // 確認中の連打は新しい状態を作らず、入力されたコマンドも実行しません。
         if (pendingByPlayer.containsKey(player.uniqueId)) return true
 
-        val parsed = CommandSafeguardCommandParser.parse(normalizedMessage) ?: return false
-        val snapshot = snapshot(player, parsed)
-        if (!snapshot.shouldActivate) return false
+        // コマンドの意味解析やセレクター解決は行わず、管理者が設定した完全一致の
+        // 文字列だけを保護します。別表記を保護したい場合は設定へ明示的に追加します。
+        if (normalizedMessage !in blacklistedCommands) return false
 
         val confirmation = PendingConfirmation(
-            command = parsed.normalizedCommand,
-            parsed = parsed,
+            command = normalizedMessage,
             stage = ConfirmationStage.FIRST,
-            snapshot = snapshot,
         )
         pendingByPlayer[player.uniqueId] = confirmation
         startConfirmationSound(player)
@@ -84,21 +86,6 @@ internal class CommandSafeguardService(
         pendingByPlayer.clear()
         soundTasksByPlayer.clear()
         approvedCommandsByPlayer.clear()
-    }
-
-    private fun snapshot(player: Player, parsed: ParsedSafeguardCommand): CommandSafeguardSnapshot {
-        val selectorTargets = parsed.selectors.mapNotNull { selector ->
-            // 空の条件角括弧はVanilla上で条件なしと同義です。実行系によっては
-            // selectEntitiesへそのまま渡した場合の扱いが異なるため、解決時だけ
-            // @e[]を@eへ正規化し、表示・再実行する元のコマンドは変更しません。
-            val selectorForSelection = selector.removeSuffix("[]")
-            runCatching { plugin.server.selectEntities(player, selectorForSelection).size }
-                .getOrNull()
-                ?.let { count -> CommandSelectorTargetCount(selector, count) }
-        }
-        // 要件どおり、分母は特定ワールドではなく全ワールドの読み込み済みEntity総数です。
-        val totalLoadedEntities = plugin.server.worlds.sumOf { world -> world.entities.size.toLong() }
-        return CommandSafeguardSnapshot(totalLoadedEntities, selectorTargets)
     }
 
     private fun showConfirmation(player: Player, confirmation: PendingConfirmation): Boolean {
@@ -216,8 +203,6 @@ internal class CommandSafeguardService(
             SafeguardAction.EXECUTE -> if (stage == ConfirmationStage.FIRST) {
                 val next = current.copy(
                     stage = ConfirmationStage.SECOND,
-                    // 1回目の確認を通った時点で、最新の対象数を2回目の画面へ表示します。
-                    snapshot = snapshot(player, current.parsed),
                 )
                 pendingByPlayer[player.uniqueId] = next
                 if (!showConfirmation(player, next)) {
@@ -279,24 +264,16 @@ internal class CommandSafeguardService(
     }
 
     private fun dialogBody(player: Player, confirmation: PendingConfirmation): List<Component> = listOf(
-        component(player, confirmation.stage.descriptionKey),
+        component(player, Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_DESCRIPTION),
         component(player, Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_COMMAND_LABEL),
         Component.text(sanitizeCommand(confirmation.command)),
-        component(player, Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_TARGET_COUNT, countPlaceholders(confirmation.snapshot)),
     )
 
     private fun formBody(player: Player, confirmation: PendingConfirmation): String = listOf(
-        text(player, confirmation.stage.descriptionKey),
+        text(player, Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_DESCRIPTION),
         text(player, Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_COMMAND_LABEL),
         sanitizeCommand(confirmation.command),
-        text(player, Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_TARGET_COUNT, countPlaceholders(confirmation.snapshot)),
     ).joinToString("\n")
-
-    private fun countPlaceholders(snapshot: CommandSafeguardSnapshot): Map<String, Any> = mapOf(
-        "targets" to snapshot.maxSelectorTargets,
-        "total" to snapshot.totalLoadedEntities,
-        "percentage" to String.format(Locale.ROOT, "%.1f", snapshot.targetPercentage),
-    )
 
     private fun sanitizeCommand(command: String): String {
         val sanitized = command
@@ -324,25 +301,20 @@ internal class CommandSafeguardService(
 
     private data class PendingConfirmation(
         val command: String,
-        val parsed: ParsedSafeguardCommand,
         val stage: ConfirmationStage,
-        val snapshot: CommandSafeguardSnapshot,
     )
 
     private enum class ConfirmationStage(
         val dialogId: String,
         val formId: String,
-        val descriptionKey: LocalizationKey<String>,
     ) {
         FIRST(
             "first",
             "first",
-            Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_FIRST_DESCRIPTION,
         ),
         SECOND(
             "second",
             "second",
-            Keys.CHANPON_UTILITIES_COMMAND_SAFEGUARD_SECOND_DESCRIPTION,
         ),
     }
 
@@ -359,6 +331,7 @@ internal class CommandSafeguardService(
 
     private companion object {
         const val OWNER = "chanpon-utilities"
+        const val BLACKLIST_CONFIG_PATH = "command_safeguard.blacklist"
         const val MAX_COMMAND_DISPLAY_LENGTH = 256
         const val SOUND_INTERVAL_TICKS = 20L
         const val SOUND_VOLUME = 1.0f

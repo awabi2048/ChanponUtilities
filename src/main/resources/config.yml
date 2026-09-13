@@ -44,4 +44,10 @@ effects:
       key: minecraft:entity.experience_orb.pickup
       volume: 1.0
       pitch: 2.0
-config_version: 6
+
+command_safeguard:
+  blacklist:
+    - "/kill @e[]"
+    - "/kill @e"
+
+config_version: 7
