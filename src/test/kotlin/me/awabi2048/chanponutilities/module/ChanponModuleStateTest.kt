@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test
 
 class ChanponModuleStateTest {
     @Test
-    fun `all four modules have stable ids and config paths`() {
+    fun `all modules have stable ids and config paths`() {
         assertEquals(
-            listOf("freecam", "lectern_bookshelf_link", "tour_safety", "player_state"),
+            listOf("freecam", "lectern_bookshelf_link", "tour_safety", "player_state", "command_safeguard"),
             ChanponModule.all.map(ChanponModule::id),
         )
         assertEquals(
@@ -19,6 +19,7 @@ class ChanponModuleStateTest {
                 "features.lectern_bookshelf_link.enabled",
                 "features.tour_safety.enabled",
                 "features.player_state.enabled",
+                "features.command_safeguard.enabled",
             ),
             ChanponModule.all.map(ChanponModule::enabledConfigPath),
         )
@@ -46,7 +47,15 @@ class ChanponModuleStateTest {
 
         assertTrue(original.isEnabled(ChanponModule.TOUR_SAFETY))
         assertFalse(changed.isEnabled(ChanponModule.TOUR_SAFETY))
-        assertEquals(setOf(ChanponModule.FREECAM, ChanponModule.LECTERN_BOOKSHELF_LINK, ChanponModule.PLAYER_STATE), changed.enabledModules())
+        assertEquals(
+            setOf(
+                ChanponModule.FREECAM,
+                ChanponModule.LECTERN_BOOKSHELF_LINK,
+                ChanponModule.PLAYER_STATE,
+                ChanponModule.COMMAND_SAFEGUARD,
+            ),
+            changed.enabledModules(),
+        )
         assertEquals(false, changed.asConfigValues()["tour_safety"])
     }
 

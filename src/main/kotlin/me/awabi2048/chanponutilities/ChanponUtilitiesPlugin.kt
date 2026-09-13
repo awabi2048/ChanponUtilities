@@ -18,6 +18,8 @@ import me.awabi2048.chanponutilities.integration.MyWorldManagerIntegration
 import me.awabi2048.chanponutilities.listener.LecternBookshelfLinkListener
 import me.awabi2048.chanponutilities.module.ChanponModule
 import me.awabi2048.chanponutilities.module.ChanponModuleState
+import me.awabi2048.chanponutilities.safety.CommandSafeguardListener
+import me.awabi2048.chanponutilities.safety.CommandSafeguardService
 import me.awabi2048.chanponutilities.safety.TourSafetyCommand
 import me.awabi2048.chanponutilities.safety.TourSafetyListener
 import me.awabi2048.chanponutilities.safety.TourSafetyPreferenceStore
@@ -37,6 +39,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     private var myWorldManagerIntegration: AutoCloseable? = null
     private var freecamSessionService: FreecamSessionService? = null
     private var tourSafetyService: TourSafetyService? = null
+    private var commandSafeguardService: CommandSafeguardService? = null
     private var moduleState: ChanponModuleState = ChanponModuleState.defaults()
 
     override fun onEnable() {
@@ -148,6 +151,19 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                                 config.set("features.lectern_bookshelf_link.sneak_read.reverse", false)
                             }
                         },
+                        6 to ConfigMigration { config ->
+                            if (!config.contains(COMMAND_SAFEGUARD_BLACKLIST_PATH)) {
+                                config.set(
+                                    COMMAND_SAFEGUARD_BLACKLIST_PATH,
+                                    DEFAULT_COMMAND_SAFEGUARD_BLACKLIST,
+                                )
+                            }
+                        },
+                        7 to ConfigMigration { config ->
+                            if (!config.contains(ChanponModule.COMMAND_SAFEGUARD.enabledConfigPath)) {
+                                config.set(ChanponModule.COMMAND_SAFEGUARD.enabledConfigPath, true)
+                            }
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -159,6 +175,15 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     private fun startPlugin() {
         reloadConfig()
         moduleState = loadModuleState()
+
+        // 有効化中は権限設定に左右されない安全境界として動作しますが、登録状態は
+        // ChanponModule に統一します。これにより /cu status と enable/disable の表示・
+        // 設定保存・ライフサイクル再構築が同じ状態を参照できます。
+        if (isModuleEnabled(ChanponModule.COMMAND_SAFEGUARD)) {
+            val commandSafeguard = CommandSafeguardService(this)
+            commandSafeguardService = commandSafeguard
+            server.pluginManager.registerEvents(CommandSafeguardListener(commandSafeguard), this)
+        }
 
         if (isModuleEnabled(ChanponModule.FREECAM)) {
             val poseCaptureService = if (server.pluginManager.isPluginEnabled("GSit")) {
@@ -213,6 +238,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         lifecycleActive = false
         HandlerList.unregisterAll(this)
         server.scheduler.cancelTasks(this)
+        commandSafeguardService?.shutdown()
+        commandSafeguardService = null
         freecamSessionService?.shutdown()
         freecamSessionService = null
         tourSafetyService?.let { service -> server.onlinePlayers.forEach(service::clear) }
@@ -279,6 +306,26 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             "freecam item material is invalid"
         }
         require(config.isList("features.freecam.restrictions.allowed_commands")) { "freecam allowed_commands must be list" }
+        val rawBlacklist = config.get(COMMAND_SAFEGUARD_BLACKLIST_PATH)
+        require(rawBlacklist is List<*>) {
+            "$COMMAND_SAFEGUARD_BLACKLIST_PATH must be list"
+        }
+        val normalizedBlacklist = rawBlacklist.mapIndexed { index, value ->
+            require(value is String) {
+                "$COMMAND_SAFEGUARD_BLACKLIST_PATH[$index] must be string"
+            }
+            val command = value.trim()
+            require(command.startsWith('/')) {
+                "$COMMAND_SAFEGUARD_BLACKLIST_PATH[$index] must start with /"
+            }
+            require(command.isNotEmpty()) {
+                "$COMMAND_SAFEGUARD_BLACKLIST_PATH[$index] must not be blank"
+            }
+            command
+        }
+        require(normalizedBlacklist.distinct().size == normalizedBlacklist.size) {
+            "$COMMAND_SAFEGUARD_BLACKLIST_PATH must not contain duplicates"
+        }
     }
 
     private fun configPath(): Path = dataFolder.resolve("config.yml").toPath()
@@ -332,6 +379,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 6
+        const val CONFIG_VERSION = 8
+        const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
+        val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }
 }

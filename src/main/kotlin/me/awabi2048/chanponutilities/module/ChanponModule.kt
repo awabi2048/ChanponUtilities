@@ -15,6 +15,7 @@ enum class ChanponModule(
     LECTERN_BOOKSHELF_LINK("lectern_bookshelf_link", "features.lectern_bookshelf_link.enabled"),
     TOUR_SAFETY("tour_safety", "features.tour_safety.enabled"),
     PLAYER_STATE("player_state", "features.player_state.enabled"),
+    COMMAND_SAFEGUARD("command_safeguard", "features.command_safeguard.enabled"),
     ;
 
     companion object {
