@@ -20,11 +20,12 @@ import java.util.logging.Level
 internal class BedrockPlayerHeadCommand(private val plugin: ChanponUtilitiesPlugin) : CommandExecutor {
     override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<out String>): Boolean {
         val player = sender as? Player ?: return true
-        if (args.size != 1 || args[0].isBlank()) {
+        if (args.isEmpty() || args.joinToString(" ").isBlank()) {
             player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_USAGE))
             return true
         }
-        val requestName = args[0]
+        // Xboxゲーマータグには空白を含むものがあるため、コマンド引数を名前として再結合します。
+        val requestName = args.joinToString(" ").trim()
         player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_LOADING))
         CCSystem.getAPI().getBedrockSkinService().fetch(requestName).whenComplete { skin, failure ->
             // 外部APIの完了スレッドからBukkitのアイテム・プレイヤー状態へ触れません。
@@ -39,7 +40,7 @@ internal class BedrockPlayerHeadCommand(private val plugin: ChanponUtilitiesPlug
                     val head = ItemStack(Material.PLAYER_HEAD)
                     val meta = head.itemMeta as SkullMeta
                     val uuid = UUID.nameUUIDFromBytes("bedrock:${skin.xuid}".toByteArray(StandardCharsets.UTF_8))
-                    val profile = Bukkit.createProfile(uuid, skin.gamertag)
+                    val profile = Bukkit.createProfile(uuid, null)
                     profile.setProperty(ProfileProperty("textures", skin.value, skin.signature))
                     meta.playerProfile = profile
                     head.itemMeta = meta

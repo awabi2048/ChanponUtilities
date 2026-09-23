@@ -6,7 +6,7 @@
 
     <groupId>me.awabi2048</groupId>
     <artifactId>chanpon-utilities</artifactId>
-    <version>26.923.1</version>
+    <version>26.923.2</version>
     <packaging>jar</packaging>
 
     <name>Chanpon-Utilities</name>
