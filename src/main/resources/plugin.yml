@@ -9,6 +9,10 @@ softdepend:
   - GSit
 
 commands:
+  beplayerhead:
+    description: 統合版プレイヤーのスキンを使用したヘッドを取得します
+    usage: /beplayerhead <player name>
+    permission: chanponutilities.beplayerhead
   cu:
     description: Chanpon-Utilitiesのサーバー全体機能を管理します
     usage: /cu <status|enable|disable> [module]
@@ -23,6 +27,9 @@ commands:
     permission: chanponutilities.anzen
 
 permissions:
+  chanponutilities.beplayerhead:
+    description: 統合版プレイヤーのヘッドを取得する権限
+    default: op
   chanponutilities.admin:
     description: Chanpon-Utilities 全機能の管理権限
     default: op

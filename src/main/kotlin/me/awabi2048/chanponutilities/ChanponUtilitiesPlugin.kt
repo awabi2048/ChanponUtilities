@@ -6,6 +6,7 @@ import com.awabi2048.ccsystem.api.config.ConfigMigration
 import com.awabi2048.ccsystem.api.config.ConfigValidator
 import com.awabi2048.ccsystem.api.config.ManagedConfigSpec
 import me.awabi2048.chanponutilities.command.ChanponManagementCommand
+import me.awabi2048.chanponutilities.command.BedrockPlayerHeadCommand
 import me.awabi2048.chanponutilities.command.ChanponModuleUnavailableCommand
 import me.awabi2048.chanponutilities.freecam.FreecamCommand
 import me.awabi2048.chanponutilities.freecam.CCSystemSwapHandInputClaimGate
@@ -52,6 +53,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             setExecutor(executor)
             tabCompleter = executor
         }
+        installCommand("beplayerhead", BedrockPlayerHeadCommand(this))
 
         startPlugin()
         logger.info("Chanpon-Utilities has been enabled.")
