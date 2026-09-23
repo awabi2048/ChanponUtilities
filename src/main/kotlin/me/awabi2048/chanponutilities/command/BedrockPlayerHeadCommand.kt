@@ -2,9 +2,11 @@ package me.awabi2048.chanponutilities.command
 
 import com.awabi2048.ccsystem.CCSystem
 import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
+import com.awabi2048.ccsystem.api.skin.BedrockSkinLookupResult
 import com.destroystokyo.paper.profile.ProfileProperty
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.util.ChanponI18n
+import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.command.Command
@@ -33,22 +35,44 @@ internal class BedrockPlayerHeadCommand(private val plugin: ChanponUtilitiesPlug
                 if (!player.isOnline) return@Runnable
                 if (failure != null) {
                     plugin.logger.log(Level.WARNING, "Bedrock skin lookup failed for $requestName", failure)
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_FAILED))
-                } else if (skin == null) {
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_NOT_FOUND))
-                } else {
-                    val head = ItemStack(Material.PLAYER_HEAD)
-                    val meta = head.itemMeta as SkullMeta
-                    val uuid = UUID.nameUUIDFromBytes("bedrock:${skin.xuid}".toByteArray(StandardCharsets.UTF_8))
-                    val profile = Bukkit.createProfile(uuid, null)
-                    profile.setProperty(ProfileProperty("textures", skin.value, skin.signature))
-                    meta.playerProfile = profile
-                    head.itemMeta = meta
-                    val excess = player.inventory.addItem(head)
-                    if (excess.isNotEmpty()) {
-                        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_INVENTORY_FULL))
-                    } else {
-                        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_SUCCESS, "name" to skin.gamertag))
+                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_SERVICE_UNAVAILABLE))
+                    return@Runnable
+                }
+                when (val result = requireNotNull(skin)) {
+                    BedrockSkinLookupResult.FloodgateUnavailable -> player.sendMessage(
+                        ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_FLOODGATE_UNAVAILABLE),
+                    )
+                    BedrockSkinLookupResult.PlayerNotFound -> player.sendMessage(
+                        ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_PLAYER_NOT_FOUND),
+                    )
+                    BedrockSkinLookupResult.SkinNotFound -> player.sendMessage(
+                        ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_SKIN_NOT_FOUND),
+                    )
+                    BedrockSkinLookupResult.ServiceUnavailable -> player.sendMessage(
+                        ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_SERVICE_UNAVAILABLE),
+                    )
+                    BedrockSkinLookupResult.InvalidResponse -> player.sendMessage(
+                        ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_INVALID_RESPONSE),
+                    )
+                    is BedrockSkinLookupResult.Found -> {
+                        val skin = result.skin
+                        val head = ItemStack(Material.PLAYER_HEAD)
+                        val meta = head.itemMeta as SkullMeta
+                        val uuid = UUID.nameUUIDFromBytes("bedrock:${skin.xuid}".toByteArray(StandardCharsets.UTF_8))
+                        val profile = Bukkit.createProfile(uuid, null)
+                        profile.setProperty(ProfileProperty("textures", skin.value, skin.signature))
+                        meta.playerProfile = profile
+                        // itemNameは通常のアイテム名として表示され、カスタム名用の斜体表示になりません。
+                        meta.itemName(Component.text("${skin.serverName} の頭"))
+                        head.itemMeta = meta
+                        val excess = player.inventory.addItem(head)
+                        if (excess.isNotEmpty()) {
+                            player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_INVENTORY_FULL))
+                        } else {
+                            player.sendMessage(
+                                ChanponI18n.text(player, Keys.CHANPON_UTILITIES_BEPLAYERHEAD_SUCCESS, "name" to skin.serverName),
+                            )
+                        }
                     }
                 }
             })
