@@ -27,7 +27,7 @@ kotlin {
 
 // pom.xml の provided スコープ相当（compileOnly へ配置し、テストのコンパイル・実行双方で見えるよう testImplementation にも追加）
 val providedDeps = listOf(
-    "io.papermc.paper:paper-api:26.1.2.build.72-stable",
+    "io.papermc.paper:paper-api:26.2.build.129-stable",
     "com.awabi2048:CC-System:26.926.1",
     "awabi2048:my-world-manager:26.911.1",
     "maven.modrinth:GOHbQGyX:nZM8fxpG",
