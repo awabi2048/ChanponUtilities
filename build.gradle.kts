@@ -1,0 +1,76 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    kotlin("jvm") version "2.3.20"
+    id("com.gradleup.shadow") version "9.6.1"
+    `maven-publish`
+}
+
+group = "me.awabi2048"
+version = "26.926.1"
+
+repositories {
+    mavenLocal()
+    maven { url = uri("../.m2-paper26-kotlin2320") }
+    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://api.modrinth.com/maven")
+    mavenCentral()
+}
+
+kotlin {
+    jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_25)
+        freeCompilerArgs.add("-Xjsr305=strict")
+    }
+}
+
+// pom.xml の provided スコープ相当（compileOnly へ配置し、テストのコンパイル・実行双方で見えるよう testImplementation にも追加）
+val providedDeps = listOf(
+    "io.papermc.paper:paper-api:26.1.2.build.72-stable",
+    "com.awabi2048:CC-System:26.926.1",
+    "awabi2048:my-world-manager:26.911.1",
+    "maven.modrinth:GOHbQGyX:nZM8fxpG",
+)
+
+dependencies {
+    providedDeps.forEach {
+        compileOnly(it)
+        testImplementation(it)
+    }
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:2.3.20")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
+
+// pom.xml の resources filtering 相当（${project.version} を展開）
+tasks.processResources {
+    val versionString = project.version.toString()
+    filesMatching("plugin.yml") {
+        expand(mapOf("project" to mapOf("version" to versionString)))
+    }
+}
+
+tasks.shadowJar {
+    archiveBaseName.set("Chanpon-Utilities")
+    archiveClassifier.set("")
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("plugin") {
+            artifactId = "chanpon-utilities"
+            from(components["shadow"])
+        }
+    }
+    repositories {
+        maven {
+            name = "workspace"
+            url = uri("../.m2-paper26-kotlin2320")
+        }
+    }
+}

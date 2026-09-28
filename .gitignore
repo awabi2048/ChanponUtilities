@@ -1,4 +1,7 @@
 target/
+.gradle/
+build/
+.kotlin/
 *.iml
 .idea/
 
