@@ -17,6 +17,12 @@ object ChanponI18n {
             .map { it.replace('&', '§') }
     }
 
+    /**
+     * ルート定義など外部データ由来の生テキストに含まれる `&` カラーコードを
+     * 表示用の `§` へ変換します。カタログ外のユーザー定義文字列専用です。
+     */
+    fun colorize(raw: String): String = raw.replace('&', '§')
+
     private fun placeholdersMap(vararg pairs: Pair<String, Any?>): Map<String, Any> {
         return pairs.filter { it.second != null }.associate { it.first to it.second!! }
     }

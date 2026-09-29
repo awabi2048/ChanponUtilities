@@ -16,6 +16,10 @@ import me.awabi2048.chanponutilities.freecam.FreecamSessionService
 import me.awabi2048.chanponutilities.freecam.GSitPoseCaptureService
 import me.awabi2048.chanponutilities.freecam.StandingPoseCaptureService
 import me.awabi2048.chanponutilities.integration.MyWorldManagerIntegration
+import me.awabi2048.chanponutilities.guide.GuideCommand
+import me.awabi2048.chanponutilities.guide.GuideListener
+import me.awabi2048.chanponutilities.guide.GuideRouteStore
+import me.awabi2048.chanponutilities.guide.GuideSessionService
 import me.awabi2048.chanponutilities.listener.LecternBookshelfLinkListener
 import me.awabi2048.chanponutilities.module.ChanponModule
 import me.awabi2048.chanponutilities.module.ChanponModuleState
@@ -41,6 +45,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     private var freecamSessionService: FreecamSessionService? = null
     private var tourSafetyService: TourSafetyService? = null
     private var commandSafeguardService: CommandSafeguardService? = null
+    private var guideSessionService: GuideSessionService? = null
+    private var guideRouteStore: GuideRouteStore? = null
     private var moduleState: ChanponModuleState = ChanponModuleState.defaults()
 
     override fun onEnable() {
@@ -69,8 +75,12 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     internal fun currentModuleState(): ChanponModuleState = moduleState
 
-    internal fun isModuleUnavailable(module: ChanponModule): Boolean =
-        module == ChanponModule.PLAYER_STATE && !server.pluginManager.isPluginEnabled("MyWorldManager")
+    internal fun isModuleUnavailable(module: ChanponModule): Boolean = when {
+        module == ChanponModule.PLAYER_STATE && !server.pluginManager.isPluginEnabled("MyWorldManager") -> true
+        // 仮想エンティティ描画に ProtocolLib が必須です。
+        module == ChanponModule.GUIDE_ARRAY && !server.pluginManager.isPluginEnabled("ProtocolLib") -> true
+        else -> false
+    }
 
     /**
      * モジュール設定はサーバー全体で共有し、変更後はイベント登録とタスクを再構築します。
@@ -166,6 +176,28 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                                 config.set(ChanponModule.COMMAND_SAFEGUARD.enabledConfigPath, true)
                             }
                         },
+                        8 to ConfigMigration { config ->
+                            // ガイドアレイ機能の既定値を補完します。
+                            config.set("features.guide_array.enabled", config.getBoolean("features.guide_array.enabled", true))
+                            if (!config.contains("features.guide_array.click_distance")) {
+                                config.set("features.guide_array.click_distance", 4.5)
+                            }
+                            if (!config.contains("features.guide_array.course_radius")) {
+                                config.set("features.guide_array.course_radius", 8.0)
+                            }
+                            if (!config.contains("features.guide_array.off_course_grace_seconds")) {
+                                config.set("features.guide_array.off_course_grace_seconds", 10.0)
+                            }
+                            if (!config.contains("features.guide_array.follow_message_interval_seconds")) {
+                                config.set("features.guide_array.follow_message_interval_seconds", 5.0)
+                            }
+                            if (!config.contains("features.guide_array.flight_speed")) {
+                                config.set("features.guide_array.flight_speed", 4.0)
+                            }
+                            if (!config.contains("features.guide_array.follow_flight_speed")) {
+                                config.set("features.guide_array.follow_flight_speed", 6.0)
+                            }
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -228,6 +260,37 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             installCommand("anzen", ChanponModuleUnavailableCommand(ChanponModule.TOUR_SAFETY))
         }
 
+        if (isModuleEnabled(ChanponModule.GUIDE_ARRAY)) {
+            if (server.pluginManager.isPluginEnabled("ProtocolLib")) {
+                val store = GuideRouteStore(this)
+                when (val loaded = store.load()) {
+                    is GuideRouteStore.LoadResult.Loaded ->
+                        logger.info("ガイドルートを ${loaded.routeCount} 件読み込みました。")
+                    is GuideRouteStore.LoadResult.Invalid ->
+                        loaded.errors.forEach { logger.severe("guide_routes.yml: $it") }
+                }
+                guideRouteStore = store
+                val settings = GuideSessionService.GuideSettings(
+                    clickDistance = config.getDouble("features.guide_array.click_distance", 4.5),
+                    courseRadius = config.getDouble("features.guide_array.course_radius", 8.0),
+                    offCourseGraceSeconds = config.getDouble("features.guide_array.off_course_grace_seconds", 10.0),
+                    followMessageIntervalSeconds = config.getDouble("features.guide_array.follow_message_interval_seconds", 5.0),
+                    flightSpeed = config.getDouble("features.guide_array.flight_speed", 4.0),
+                    followFlightSpeed = config.getDouble("features.guide_array.follow_flight_speed", 6.0),
+                )
+                val service = GuideSessionService(this, settings)
+                guideSessionService = service
+                service.start()
+                server.pluginManager.registerEvents(GuideListener(service), this)
+                installCommand("guide", GuideCommand(store, service))
+            } else {
+                logger.warning("ProtocolLib が見つからないため guide_array は動作しません。")
+                installCommand("guide", ChanponModuleUnavailableCommand(ChanponModule.GUIDE_ARRAY))
+            }
+        } else {
+            installCommand("guide", ChanponModuleUnavailableCommand(ChanponModule.GUIDE_ARRAY))
+        }
+
         if (isModuleEnabled(ChanponModule.PLAYER_STATE) && server.pluginManager.isPluginEnabled("MyWorldManager")) {
             myWorldManagerIntegration = MyWorldManagerIntegration.enable(this)
         } else if (!server.pluginManager.isPluginEnabled("MyWorldManager")) {
@@ -251,12 +314,18 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         myWorldManagerIntegration = null
         linkStore?.let { store -> runCatching(store::save).onFailure { failure -> logger.log(Level.WARNING, "Failed to save lectern links", failure) } }
         linkStore = null
+        guideSessionService?.shutdown()
+        guideSessionService = null
+        guideRouteStore = null
 
         if (getCommand("freecam") != null) {
             installCommand("freecam", ChanponModuleUnavailableCommand(ChanponModule.FREECAM))
         }
         if (getCommand("anzen") != null) {
             installCommand("anzen", ChanponModuleUnavailableCommand(ChanponModule.TOUR_SAFETY))
+        }
+        if (getCommand("guide") != null) {
+            installCommand("guide", ChanponModuleUnavailableCommand(ChanponModule.GUIDE_ARRAY))
         }
     }
 
@@ -328,6 +397,43 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         require(normalizedBlacklist.distinct().size == normalizedBlacklist.size) {
             "$COMMAND_SAFEGUARD_BLACKLIST_PATH must not contain duplicates"
         }
+        // ガイドアレイの動作パラメータは正の有限数であることを要求します。
+        require(config.get("features.guide_array.click_distance") is Number) {
+            "features.guide_array.click_distance must be a number"
+        }
+        require(config.getDouble("features.guide_array.click_distance") > 0.0) {
+            "features.guide_array.click_distance must be positive"
+        }
+        require(config.get("features.guide_array.course_radius") is Number) {
+            "features.guide_array.course_radius must be a number"
+        }
+        require(config.getDouble("features.guide_array.course_radius") > 0.0) {
+            "features.guide_array.course_radius must be positive"
+        }
+        require(config.get("features.guide_array.off_course_grace_seconds") is Number) {
+            "features.guide_array.off_course_grace_seconds must be a number"
+        }
+        require(config.getDouble("features.guide_array.off_course_grace_seconds") >= 0.0) {
+            "features.guide_array.off_course_grace_seconds must not be negative"
+        }
+        require(config.get("features.guide_array.follow_message_interval_seconds") is Number) {
+            "features.guide_array.follow_message_interval_seconds must be a number"
+        }
+        require(config.getDouble("features.guide_array.follow_message_interval_seconds") > 0.0) {
+            "features.guide_array.follow_message_interval_seconds must be positive"
+        }
+        require(config.get("features.guide_array.flight_speed") is Number) {
+            "features.guide_array.flight_speed must be a number"
+        }
+        require(config.getDouble("features.guide_array.flight_speed") > 0.0) {
+            "features.guide_array.flight_speed must be positive"
+        }
+        require(config.get("features.guide_array.follow_flight_speed") is Number) {
+            "features.guide_array.follow_flight_speed must be a number"
+        }
+        require(config.getDouble("features.guide_array.follow_flight_speed") > 0.0) {
+            "features.guide_array.follow_flight_speed must be positive"
+        }
     }
 
     private fun configPath(): Path = dataFolder.resolve("config.yml").toPath()
@@ -381,7 +487,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 8
+        const val CONFIG_VERSION = 9
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }

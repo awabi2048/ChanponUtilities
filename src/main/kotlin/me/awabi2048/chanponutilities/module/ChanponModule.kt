@@ -16,6 +16,7 @@ enum class ChanponModule(
     TOUR_SAFETY("tour_safety", "features.tour_safety.enabled"),
     PLAYER_STATE("player_state", "features.player_state.enabled"),
     COMMAND_SAFEGUARD("command_safeguard", "features.command_safeguard.enabled"),
+    GUIDE_ARRAY("guide_array", "features.guide_array.enabled"),
     ;
 
     companion object {

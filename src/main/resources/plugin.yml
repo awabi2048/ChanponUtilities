@@ -7,6 +7,7 @@ depend:
 softdepend:
   - MyWorldManager
   - GSit
+  - ProtocolLib
 
 commands:
   beplayerhead:
@@ -25,6 +26,9 @@ commands:
     description: 観光用の安全機能を切り替えます
     usage: /anzen
     permission: chanponutilities.anzen
+  guide:
+    description: ガイドアレイによるルート案内を操作します
+    usage: /guide [start [route]|stop|status|admin <setpoint|reload>]
 
 permissions:
   chanponutilities.beplayerhead:
@@ -37,6 +41,7 @@ permissions:
       chanponutilities.link: true
       chanponutilities.read: true
       chanponutilities.freecam: true
+      chanponutilities.guide.admin: true
   chanponutilities.link:
     description: 本棚設置時に書見台リンクを作成する権限
     default: true
@@ -49,3 +54,9 @@ permissions:
   chanponutilities.anzen:
     description: 観光用の安全機能を使用する権限
     default: true
+  chanponutilities.guide:
+    description: ガイドアレイを利用する権限
+    default: true
+  chanponutilities.guide.admin:
+    description: ガイドルートの管理（中継点登録・再読込）権限
+    default: op

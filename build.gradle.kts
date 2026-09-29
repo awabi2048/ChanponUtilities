@@ -7,13 +7,14 @@ plugins {
 }
 
 group = "me.awabi2048"
-version = "26.926.1"
+version = "26.930.1"
 
 repositories {
     mavenLocal()
     maven { url = uri("../.m2-paper26-kotlin2320") }
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://api.modrinth.com/maven")
+    maven("https://repo.dmulloy2.net/repository/public/")
     mavenCentral()
 }
 
@@ -28,9 +29,10 @@ kotlin {
 // pom.xml の provided スコープ相当（compileOnly へ配置し、テストのコンパイル・実行双方で見えるよう testImplementation にも追加）
 val providedDeps = listOf(
     "io.papermc.paper:paper-api:26.2.build.129-stable",
-    "com.awabi2048:CC-System:26.926.1",
+    "com.awabi2048:CC-System:26.930.2",
     "awabi2048:my-world-manager:26.911.1",
     "maven.modrinth:GOHbQGyX:nZM8fxpG",
+    "net.dmulloy2:ProtocolLib:5.4.0",
 )
 
 dependencies {

@@ -25,6 +25,14 @@ features:
     enabled: true
   command_safeguard:
     enabled: true
+  guide_array:
+    enabled: true
+    click_distance: 4.5
+    course_radius: 8.0
+    off_course_grace_seconds: 10.0
+    follow_message_interval_seconds: 5.0
+    flight_speed: 4.0
+    follow_flight_speed: 6.0
 
 effects:
   link_success:
@@ -52,4 +60,4 @@ command_safeguard:
     - "/kill @e[]"
     - "/kill @e"
 
-config_version: 7
+config_version: 9
