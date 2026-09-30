@@ -21,7 +21,10 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Level
+import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.roundToInt
 
 /**
  * ProtocolLib による client-only の仮想アレイ描画です。
@@ -42,6 +45,10 @@ internal class GuideAllayRenderer(
     private val manager by lazy { ProtocolLibrary.getProtocolManager() }
     private val idAllocator = AtomicInteger(VIRTUAL_ID_BASE)
     private val managedIds: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    // client が知る直近の絶対位置です。移動は相対 packet（PosRot）で送るため、
+    // 送信済み位置との差分から相対量を求めます。
+    private val sentPositions = ConcurrentHashMap<Int, Vector>()
 
     private val interactListener: PacketListener = object : PacketAdapter(
         plugin,
@@ -68,6 +75,7 @@ internal class GuideAllayRenderer(
     fun unregister() {
         runCatching { manager.removePacketListener(interactListener) }
         managedIds.clear()
+        sentPositions.clear()
     }
 
     /**
@@ -97,6 +105,7 @@ internal class GuideAllayRenderer(
         spawn.bytes.write(2, toPackedByte(yaw))
         spawn.vectors.write(0, Vector(0, 0, 0))
         send(viewer, spawn)
+        sentPositions[id] = Vector(x, y, z)
 
         sendMetadata(viewer, id, displayName)
         return id
@@ -122,19 +131,45 @@ internal class GuideAllayRenderer(
     /**
      * 仮想アレイを絶対座標へ移動し、体と頭の向きを更新します。
      *
-     * client は teleport を数 tick かけて補間するため、毎 tick 小刻みに
-     * 送れば直線飛行が滑らかに見えます。
+     * 26.2 系では teleport packet が PositionMoveRotation レコード構成に変わり
+     * 素の座標を直接書けないため、毎 tick の小刻みな移動には相対移動 packet
+     * （REL_ENTITY_MOVE_LOOK）を使います。client は受信位置へ数 tick かけて
+     * 補間するため、毎 tick 送れば直線飛行が滑らかに見えます。
      */
     fun moveTo(viewer: Player, id: Int, x: Double, y: Double, z: Double, yaw: Float, pitch: Float) {
-        val teleport = manager.createPacket(PacketType.Play.Server.ENTITY_TELEPORT)
-        teleport.integers.write(0, id)
-        teleport.doubles.write(0, x)
-        teleport.doubles.write(1, y)
-        teleport.doubles.write(2, z)
-        teleport.bytes.write(0, toPackedByte(yaw))
-        teleport.bytes.write(1, toPackedByte(pitch))
-        teleport.booleans.write(0, false)
-        send(viewer, teleport)
+        val previous = sentPositions[id] ?: Vector(x, y, z)
+        val dx = x - previous.x
+        val dy = y - previous.y
+        val dz = z - previous.z
+
+        // 相対移動量は 1/4096 ブロック単位の short で ±8 ブロックまでしか
+        // 一度に表せません。普段の飛行では 1 hop ですが、稀な大移動に備えて
+        // 超過時は分割して順に送ります。
+        val span = maxOf(abs(dx), abs(dy), abs(dz))
+        val hops = maxOf(1, ceil(span / RELATIVE_MOVE_LIMIT).toInt())
+        var sent = previous
+        for (step in 1..hops) {
+            val t = step.toDouble() / hops
+            val tx = previous.x + dx * t
+            val ty = previous.y + dy * t
+            val tz = previous.z + dz * t
+
+            val move = manager.createPacket(PacketType.Play.Server.REL_ENTITY_MOVE_LOOK)
+            move.integers.write(0, id)
+            move.shorts.write(0, toMoveAxis(tx - sent.x))
+            move.shorts.write(1, toMoveAxis(ty - sent.y))
+            move.shorts.write(2, toMoveAxis(tz - sent.z))
+            move.bytes.write(0, toPackedByte(yaw))
+            move.bytes.write(1, toPackedByte(pitch))
+            // フィールド順は (onGround, hasRot, hasPos) です。位置・回転を
+            // 適用させるため hasRot / hasPos を立てます。
+            move.booleans.write(0, false)
+            move.booleans.write(1, true)
+            move.booleans.write(2, true)
+            send(viewer, move)
+            sent = Vector(tx, ty, tz)
+        }
+        sentPositions[id] = Vector(x, y, z)
 
         val headRotation = manager.createPacket(PacketType.Play.Server.ENTITY_HEAD_ROTATION)
         headRotation.integers.write(0, id)
@@ -144,6 +179,7 @@ internal class GuideAllayRenderer(
 
     fun destroy(viewer: Player, id: Int) {
         managedIds -= id
+        sentPositions.remove(id)
         if (!viewer.isOnline) return
         val packet = manager.createPacket(PacketType.Play.Server.ENTITY_DESTROY)
         packet.intLists.write(0, listOf(id))
@@ -178,6 +214,12 @@ internal class GuideAllayRenderer(
 
         const val FLAG_GLOWING: Byte = 0x40
 
+        /** PosRot が一度に表せる相対移動幅（±8 ブロックの手前で安全側に切ります）。 */
+        const val RELATIVE_MOVE_LIMIT: Double = 7.5
+
         fun toPackedByte(degrees: Float): Byte = floor(degrees * 256.0f / 360.0f).toInt().toByte()
+
+        fun toMoveAxis(deltaBlocks: Double): Short =
+            (deltaBlocks * 4096.0).roundToInt().toShort()
     }
 }
