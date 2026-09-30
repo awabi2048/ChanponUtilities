@@ -104,6 +104,38 @@ class GuideCourseMathTest {
     }
 
     @Test
+    fun `boundary anchor sits on the vertical cylinder facing the player`() {
+        // 区間 (0,0,0)-(0,0,100) 、半径8。プレイヤーは (20,65,50) で +X 側へ逸脱中。
+        // 最近点は (0,0,50)、面上はプレイヤー方向（+X）へ半径8の (8,y,50) です。
+        val anchors = GuideCourseMath.boundaryAnchorCandidates(
+            20.0, 65.0, 50.0,
+            0.0, 64.0, 0.0,
+            0.0, 64.0, 100.0,
+            8.0,
+        )
+        assertTrue(anchors.isNotEmpty())
+        val (x, y, z) = anchors.first()
+        assertEquals(8.0, x, 1e-9)
+        assertEquals(50.0, z, 1e-9)
+        assertEquals(65.0 + 1.2, y, 1e-9)
+    }
+
+    @Test
+    fun `boundary anchor falls back toward next waypoint on vertical deviation`() {
+        // 区間軸の真上にいる場合、水平方向が退化するため次の中継点（+Z）側へ出します。
+        val anchors = GuideCourseMath.boundaryAnchorCandidates(
+            0.0, 80.0, 50.0,
+            0.0, 64.0, 0.0,
+            0.0, 64.0, 100.0,
+            8.0,
+        )
+        assertTrue(anchors.isNotEmpty())
+        val (x, _, z) = anchors.first()
+        assertEquals(0.0, x, 1e-9)
+        assertEquals(58.0, z, 1e-9)
+    }
+
+    @Test
     fun `occupancy ignores mere face contact`() {
         // (1,0,0) が衝突ブロック。アレイ箱の右面 (x=0.675) がブロック面 x=1.0 に
         // 触れるだけの位置は占有可能として扱います。

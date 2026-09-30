@@ -82,24 +82,59 @@ object GuideCourseMath {
     }
 
     /**
-     * 追従モードでアレイが滞在を試みる候補位置（プレイヤー座標基準）の列です。
-     * 先頭ほど優先度が高く、占有不能な場合は順に次を試します。
+     * コース逸脱時にアレイが待機する候補位置の列です。
      *
-     * 頭上を優先し、続いて水平方向のリングを試します。
+     * 基準位置は、現在区間上のプレイヤー最近点を軸とする「地面に垂直な円筒」
+     * （半径 = コース半径）の側面を、プレイヤー方向の水平角度で切り取った面上です。
+     * 高さはプレイヤーと同程度に取り、方向指示が見える位置に浮かせます。
+     *
+     * 占有不能な場合に備えて、角度・高さ・半径のバリエーションを優先度順に
+     * 続けて返します。軸上（水平成分が退化する垂直逸脱）では次の中継点側へ
+     * 逃がした候補を返します。
      */
-    fun followAnchorCandidates(playerX: Double, playerY: Double, playerZ: Double): List<Triple<Double, Double, Double>> {
+    fun boundaryAnchorCandidates(
+        playerX: Double, playerY: Double, playerZ: Double,
+        ax: Double, ay: Double, az: Double,
+        bx: Double, by: Double, bz: Double,
+        radius: Double,
+    ): List<Triple<Double, Double, Double>> {
+        // 区間上の最近点（3Dでクランプ済み）を円筒の軸とします。
+        val abx = bx - ax
+        val aby = by - ay
+        val abz = bz - az
+        val apx = playerX - ax
+        val apy = playerY - ay
+        val apz = playerZ - az
+        val lengthSq = abx * abx + aby * aby + abz * abz
+        val t = if (lengthSq <= 0.0) 0.0 else ((apx * abx + apy * aby + apz * abz) / lengthSq).coerceIn(0.0, 1.0)
+        val centerX = ax + abx * t
+        val centerZ = az + abz * t
+
+        var dirX = playerX - centerX
+        var dirZ = playerZ - centerZ
+        var horizontal = sqrt(dirX * dirX + dirZ * dirZ)
+        if (horizontal < 1.0e-6) {
+            // プレイヤーが軸の真上/真下にいる場合は次の中継点側の角度を使います。
+            dirX = bx - centerX
+            dirZ = bz - centerZ
+            horizontal = sqrt(dirX * dirX + dirZ * dirZ)
+            if (horizontal < 1.0e-6) return emptyList()
+        }
+        val baseAngle = atan2(dirZ, dirX)
+
         val anchors = mutableListOf<Triple<Double, Double, Double>>()
-        anchors += Triple(playerX, playerY + 2.2, playerZ)
-        val ringRadii = listOf(1.6, 2.4)
-        val heights = listOf(playerY + 1.6, playerY + 2.0, playerY + 1.0)
-        for (radius in ringRadii) {
-            for (y in heights) {
-                for (step in 0 until 8) {
-                    val angle = step * Math.PI / 4.0
+        val angleOffsets = listOf(0.0, Math.toRadians(25.0), Math.toRadians(-25.0), Math.toRadians(50.0), Math.toRadians(-50.0))
+        val heightOffsets = listOf(1.2, 0.5, 1.8)
+        val radiusScales = listOf(1.0, 0.85)
+        for (angleOffset in angleOffsets) {
+            val angle = baseAngle + angleOffset
+            for (radiusScale in radiusScales) {
+                val r = radius * radiusScale
+                for (heightOffset in heightOffsets) {
                     anchors += Triple(
-                        playerX + radius * kotlin.math.cos(angle),
-                        y,
-                        playerZ + radius * kotlin.math.sin(angle),
+                        centerX + r * kotlin.math.cos(angle),
+                        playerY + heightOffset,
+                        centerZ + r * kotlin.math.sin(angle),
                     )
                 }
             }

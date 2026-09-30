@@ -64,7 +64,7 @@ class GuideSessionService(
         var offCourseTicks: Int = 0,
         var lastPromptAtMillis: Long = 0L,
         var lastClickPromptAtMillis: Long = 0L,
-        var bobTicks: Int = 0,
+        var animTicks: Int = 0,
         var anchorX: Double = 0.0,
         var anchorY: Double = 0.0,
         var anchorZ: Double = 0.0,
@@ -241,6 +241,7 @@ class GuideSessionService(
         val player = session.player
         if (player.world.name != session.route.worldName) return
 
+        session.animTicks++
         when (session.phase) {
             Phase.WAITING -> tickWaiting(session)
             Phase.FLYING, Phase.RETURNING -> tickFlight(session)
@@ -250,14 +251,18 @@ class GuideSessionService(
     }
 
     /**
-     * 待機中は微小な上下浮遊だけを行い、向きは中継点に設定された yaw を維持します。
+     * 論理位置に加える上下の単振動オフセットです。アレイの常時浮遊アニメーション
+     * として全フェーズで描画位置へ適用します。
+     */
+    private fun bobOffset(session: GuideSession): Double =
+        sin(session.animTicks * BOB_RADIANS_PER_TICK) * BOB_AMPLITUDE
+
+    /**
+     * 待機中は単振動による浮遊だけを行い、向きは中継点に設定された yaw を維持します。
      */
     private fun tickWaiting(session: GuideSession) {
-        session.bobTicks++
-        if (session.bobTicks % BOB_INTERVAL_TICKS != 0) return
         val point = session.route.points[session.nextIndex]
-        val offsetY = sin(session.bobTicks * BOB_RADIANS_PER_TICK) * BOB_AMPLITUDE
-        renderer.moveTo(session.player, session.entityId, point.x, point.y + offsetY, point.z, point.yaw, point.pitch)
+        renderer.moveTo(session.player, session.entityId, point.x, point.y + bobOffset(session), point.z, point.yaw, point.pitch)
     }
 
     private fun tickFlight(session: GuideSession) {
@@ -272,21 +277,20 @@ class GuideSessionService(
         session.y = step.second
         session.z = step.third
         val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y, session.z, target.x, target.y, target.z)
-        renderer.moveTo(session.player, session.entityId, session.x, session.y, session.z, yaw, pitch)
+        renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, yaw, pitch)
 
         if (GuideCourseMath.distanceSq(session.x, session.y, session.z, target.x, target.y, target.z) <= ARRIVAL_EPSILON_SQ) {
             session.x = target.x
             session.y = target.y
             session.z = target.z
             session.phase = Phase.WAITING
-            session.bobTicks = 0
-            renderer.moveTo(session.player, session.entityId, session.x, session.y, session.z, target.yaw, target.pitch)
+            renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, target.yaw, target.pitch)
         }
     }
 
     /**
-     * 追従モードです。アレイはプレイヤー付近の占有可能位置へ飛行して滞在し、
-     * 体と頭を次の中継点方向へ向けて案内します。
+     * 追従モードです。アレイはコース境界の円筒面上（プレイヤー側）にある
+     * 占有可能な位置へ飛行して滞在し、体と頭を次の中継点方向へ向けて案内します。
      * 占有可能な位置が見つからない間は現在位置を維持します。
      */
     private fun tickFollowing(session: GuideSession) {
@@ -307,12 +311,12 @@ class GuideSessionService(
             session.x, session.y + ALLAY_HEIGHT / 2.0, session.z,
             target.x, target.y, target.z,
         )
-        renderer.moveTo(session.player, session.entityId, session.x, session.y, session.z, yaw, pitch)
+        renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, yaw, pitch)
     }
 
     /**
      * プレイヤーが動いたときだけ追従アンカーを再計算し、ブロック占有判定で
-     * 置ける位置を選びます。
+     * 置ける位置を選びます。候補はコース境界円筒の側面上（プレイヤー側）です。
      */
     private fun refreshAnchorIfNeeded(session: GuideSession) {
         val loc = session.player.location
@@ -324,7 +328,15 @@ class GuideSessionService(
         session.anchorPlayerY = loc.y
         session.anchorPlayerZ = loc.z
         session.anchorValid = false
-        for ((x, y, z) in GuideCourseMath.followAnchorCandidates(loc.x, loc.y, loc.z)) {
+        val prev = session.route.points[session.nextIndex - 1]
+        val next = session.route.points[session.nextIndex]
+        val candidates = GuideCourseMath.boundaryAnchorCandidates(
+            loc.x, loc.y, loc.z,
+            prev.x, prev.y, prev.z,
+            next.x, next.y, next.z,
+            settings.courseRadius,
+        )
+        for ((x, y, z) in candidates) {
             if (canOccupyAllay(session.player.world, x, y, z)) {
                 session.anchorX = x
                 session.anchorY = y
@@ -398,10 +410,10 @@ class GuideSessionService(
         const val TICKS_PER_SECOND = 20.0
         /** 中継点への到達判定の許容誤差です。 */
         const val ARRIVAL_EPSILON_SQ = 0.01
-        /** 待機中の浮遊アニメーションの更新間隔（tick）です。 */
-        const val BOB_INTERVAL_TICKS = 4
-        const val BOB_RADIANS_PER_TICK = Math.PI / 40.0
-        const val BOB_AMPLITUDE = 0.12
+
+        // 常時の単振動アニメーションです。1tickごとの位相進行で周期は約3秒です。
+        const val BOB_RADIANS_PER_TICK = Math.PI / 30.0
+        const val BOB_AMPLITUDE = 0.15
         /** Allay の当たり判定サイズです（NMS の ALLAY 寸法 0.35 x 0.6）。 */
         const val ALLAY_HALF_WIDTH = 0.175
         const val ALLAY_HEIGHT = 0.6

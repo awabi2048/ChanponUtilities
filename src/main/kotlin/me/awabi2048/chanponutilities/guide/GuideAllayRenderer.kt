@@ -7,6 +7,7 @@ import com.comphenix.protocol.events.PacketAdapter
 import com.comphenix.protocol.events.PacketContainer
 import com.comphenix.protocol.events.PacketEvent
 import com.comphenix.protocol.events.PacketListener
+import com.comphenix.protocol.wrappers.WrappedAttribute
 import com.comphenix.protocol.wrappers.WrappedChatComponent
 import com.comphenix.protocol.wrappers.WrappedDataValue
 import com.comphenix.protocol.wrappers.WrappedDataWatcher
@@ -108,7 +109,29 @@ internal class GuideAllayRenderer(
         sentPositions[id] = Vector(x, y, z)
 
         sendMetadata(viewer, id, displayName)
+        sendScale(viewer, id)
         return id
+    }
+
+    /**
+     * scale 属性で仮想アレイの見た目を拡大します。26.2 系ではエンティティの
+     * 拡縮は metadata ではなく scale 属性として同期するため、
+     * UPDATE_ATTRIBUTES packet で送ります。
+     */
+    private fun sendScale(viewer: Player, id: Int) {
+        runCatching {
+            val packet = manager.createPacket(PacketType.Play.Server.UPDATE_ATTRIBUTES)
+            packet.integers.write(0, id)
+            val scale = WrappedAttribute.newBuilder()
+                .attributeKey("scale")
+                .baseValue(ALLAY_SCALE)
+                .packet(packet)
+                .build()
+            packet.attributeCollectionModifier.write(0, listOf(scale))
+            send(viewer, packet)
+        }.onFailure { failure ->
+            plugin.logger.log(Level.WARNING, "ガイドアレイの scale 属性送信に失敗しました: viewer=${viewer.name}", failure)
+        }
     }
 
     private fun sendMetadata(viewer: Player, id: Int, displayName: net.kyori.adventure.text.Component) {
@@ -213,6 +236,9 @@ internal class GuideAllayRenderer(
         const val ID_NAME_VISIBLE: Int = 3
 
         const val FLAG_GLOWING: Byte = 0x40
+
+        /** ガイドアレイの見た目スケールです。 */
+        const val ALLAY_SCALE: Double = 1.5
 
         /** PosRot が一度に表せる相対移動幅（±8 ブロックの手前で安全側に切ります）。 */
         const val RELATIVE_MOVE_LIMIT: Double = 7.5
