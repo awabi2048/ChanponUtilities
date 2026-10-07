@@ -138,12 +138,86 @@ internal class GuideAllayRenderer(
         val nameJson = GsonComponentSerializer.gson().serialize(displayName)
         val nameHandle = WrappedChatComponent.fromJson(nameJson).handle
         val values = listOf(
-            // index 0: shared flags。bit 0x40 が glowing です。
-            WrappedDataValue(ID_SHARED_FLAGS, byteSerializer(), FLAG_GLOWING),
+            // index 0: shared flags。bit 0x40 が glowing です。平常時は消灯し、
+            // コース逸脱の案内中だけ点けます。
+            WrappedDataValue(ID_SHARED_FLAGS, byteSerializer(), 0x00.toByte()),
             // index 2: カスタム名（Optional<ChatComponent>）。
             WrappedDataValue(ID_CUSTOM_NAME, optionalChatSerializer(), Optional.of(nameHandle)),
             // index 3: カスタム名の常時表示。
             WrappedDataValue(ID_NAME_VISIBLE, booleanSerializer(), true),
+        )
+        val packet = manager.createPacket(PacketType.Play.Server.ENTITY_METADATA)
+        packet.integers.write(0, id)
+        packet.dataValueCollectionModifier.write(0, values)
+        send(viewer, packet)
+    }
+
+    /**
+     * アレイの発光を切り替えます。コース逸脱の案内が続く間だけ点灯させ、
+     * 平常時・コース復帰後は消灯する演出です。
+     */
+    fun setGlowing(viewer: Player, id: Int, glowing: Boolean) {
+        val packet = manager.createPacket(PacketType.Play.Server.ENTITY_METADATA)
+        packet.integers.write(0, id)
+        packet.dataValueCollectionModifier.write(
+            0,
+            listOf(WrappedDataValue(ID_SHARED_FLAGS, byteSerializer(), if (glowing) FLAG_GLOWING else 0x00.toByte())),
+        )
+        send(viewer, packet)
+    }
+
+    /**
+     * アレイ頭上の案内文を表示する仮想テキストディスプレイを出現させます。
+     * 常時 viewer へ向く CENTER billboard で、y は表示原点の座標です。
+     */
+    fun spawnTextDisplay(
+        viewer: Player,
+        x: Double, y: Double, z: Double,
+        text: net.kyori.adventure.text.Component,
+    ): Int {
+        val id = idAllocator.getAndIncrement()
+        managedIds += id
+
+        val spawn = manager.createPacket(PacketType.Play.Server.SPAWN_ENTITY)
+        spawn.integers.write(0, id)
+        spawn.integers.write(1, 0)
+        spawn.getUUIDs().write(0, UUID.randomUUID())
+        spawn.entityTypeModifier.write(0, EntityType.TEXT_DISPLAY)
+        spawn.doubles.write(0, x)
+        spawn.doubles.write(1, y)
+        spawn.doubles.write(2, z)
+        spawn.bytes.write(0, 0.toByte())
+        spawn.bytes.write(1, 0.toByte())
+        spawn.bytes.write(2, 0.toByte())
+        spawn.vectors.write(0, Vector(0, 0, 0))
+        send(viewer, spawn)
+        sentPositions[id] = Vector(x, y, z)
+
+        setTextDisplayText(viewer, id, text)
+        return id
+    }
+
+    /** テキストディスプレイの本文を更新します。 */
+    fun setTextDisplayText(
+        viewer: Player,
+        id: Int,
+        text: net.kyori.adventure.text.Component,
+    ) {
+        val textJson = GsonComponentSerializer.gson().serialize(text)
+        val textHandle = WrappedChatComponent.fromJson(textJson).handle
+        val values = listOf(
+            // index 15: billboard 制約。3 は常時 viewer 正面の CENTER です。
+            WrappedDataValue(ID_BILLBOARD, byteSerializer(), BILLBOARD_CENTER),
+            // index 23: 表示テキスト（Component）。
+            WrappedDataValue(ID_TEXT, chatSerializer(), textHandle),
+            // index 24: 行幅です。
+            WrappedDataValue(ID_LINE_WIDTH, intSerializer(), TEXT_LINE_WIDTH),
+            // index 25: 背景色（半透明の黒）です。
+            WrappedDataValue(ID_BACKGROUND, intSerializer(), TEXT_BACKGROUND_ARGB),
+            // index 26: テキスト不透明度。-1 が既定値です。
+            WrappedDataValue(ID_TEXT_OPACITY, byteSerializer(), (-1).toByte()),
+            // index 27: スタイル flags。0x01=影付き、0x04=既定背景です。
+            WrappedDataValue(ID_STYLE_FLAGS, byteSerializer(), STYLE_SHADOW_OR_DEFAULT_BG),
         )
         val packet = manager.createPacket(PacketType.Play.Server.ENTITY_METADATA)
         packet.integers.write(0, id)
@@ -226,6 +300,12 @@ internal class GuideAllayRenderer(
     private fun optionalChatSerializer(): WrappedDataWatcher.Serializer =
         WrappedDataWatcher.Registry.getChatComponentSerializer(true)
 
+    private fun chatSerializer(): WrappedDataWatcher.Serializer =
+        WrappedDataWatcher.Registry.getChatComponentSerializer()
+
+    private fun intSerializer(): WrappedDataWatcher.Serializer =
+        WrappedDataWatcher.Registry.get(Int::class.javaObjectType, false)
+
     private companion object {
         /** CC-System の仮想描画採番域（1_600_000_000 起点）と重ならない高位域です。 */
         const val VIRTUAL_ID_BASE: Int = 1_700_000_000
@@ -235,7 +315,19 @@ internal class GuideAllayRenderer(
         const val ID_CUSTOM_NAME: Int = 2
         const val ID_NAME_VISIBLE: Int = 3
 
+        // Display/TextDisplay の metadata index です（26.2 の defineSynchedData 順）。
+        const val ID_BILLBOARD: Int = 15
+        const val ID_TEXT: Int = 23
+        const val ID_LINE_WIDTH: Int = 24
+        const val ID_BACKGROUND: Int = 25
+        const val ID_TEXT_OPACITY: Int = 26
+        const val ID_STYLE_FLAGS: Int = 27
+
         const val FLAG_GLOWING: Byte = 0x40
+        const val BILLBOARD_CENTER: Byte = 3
+        const val TEXT_LINE_WIDTH: Int = 200
+        const val TEXT_BACKGROUND_ARGB: Int = 0x40000000
+        const val STYLE_SHADOW_OR_DEFAULT_BG: Byte = 0x05
 
         /** ガイドアレイの見た目スケールです。 */
         const val ALLAY_SCALE: Double = 1.5

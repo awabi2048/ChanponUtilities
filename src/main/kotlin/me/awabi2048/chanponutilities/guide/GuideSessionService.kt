@@ -3,12 +3,14 @@ package me.awabi2048.chanponutilities.guide
 import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
 import me.awabi2048.chanponutilities.util.ChanponI18n
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import org.bukkit.Sound
 import org.bukkit.World
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.BoundingBox
 import java.util.UUID
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * ガイドアレイのセッション管理です。
@@ -17,8 +19,9 @@ import kotlin.math.sin
  * 完了・コース逸脱時の追従案内を状態機械として処理します。
  * すべてメインスレッド上で動作します。
  *
- * 中継点の1点目はガイド開始時に完了済みとして扱い、その message を開始
- * メッセージとして表示します。実際に案内されるのは2点目以降です。
+ * ガイド開始時は1点目でアレイが待機し、プレイヤーのクリックで1点目が
+ * 完了して案内が始まります。逸脱中はシステムチャット（長周期）と
+ * アレイ頭上のテキスト表示（短周期）の二系統で案内します。
  */
 class GuideSessionService(
     private val plugin: JavaPlugin,
@@ -33,9 +36,11 @@ class GuideSessionService(
         val clickDistance: Double,
         val courseRadius: Double,
         val offCourseGraceSeconds: Double,
-        val followMessageIntervalSeconds: Double,
+        val offCourseChatIntervalSeconds: Double,
+        val followDisplayIntervalSeconds: Double,
         val flightSpeed: Double,
         val followFlightSpeed: Double,
+        val pathCurveDeviation: Double,
     )
 
     private enum class Phase {
@@ -62,9 +67,9 @@ class GuideSessionService(
         var z: Double,
         var phase: Phase,
         var offCourseTicks: Int = 0,
-        var lastPromptAtMillis: Long = 0L,
         var lastClickPromptAtMillis: Long = 0L,
-        var animTicks: Int = 0,
+        var bobPhase: Double = 0.0,
+        var flight: GuideCourseMath.FlightPath? = null,
         var anchorX: Double = 0.0,
         var anchorY: Double = 0.0,
         var anchorZ: Double = 0.0,
@@ -72,6 +77,11 @@ class GuideSessionService(
         var anchorPlayerX: Double = Double.NaN,
         var anchorPlayerY: Double = Double.NaN,
         var anchorPlayerZ: Double = Double.NaN,
+        var followTicks: Int = 0,
+        var displayEntityId: Int = -1,
+        var displayIndex: Int = 0,
+        var glowing: Boolean = false,
+        var movingThisTick: Boolean = false,
     )
 
     fun start() {
@@ -84,7 +94,7 @@ class GuideSessionService(
             plugin.server.scheduler.cancelTask(tickTaskId)
             tickTaskId = -1
         }
-        sessions.values.forEach { renderer.destroy(it.player, it.entityId) }
+        sessions.values.forEach { destroyEntities(it) }
         sessions.clear()
         renderer.unregister()
     }
@@ -98,24 +108,16 @@ class GuideSessionService(
     /**
      * ガイドを開始します。すでにガイド中なら現在のセッションを破棄して
      * 新しいルートで開始します。
-     * 中継点が1点だけのルートは開始メッセージ表示後、その場で完了します。
+     *
+     * アレイは1点目へ出現して待機し、プレイヤーがクリックすると1点目が
+     * 完了して2点目への案内が始まります。1点のみのルートはそのクリックで
+     * 完了となります。
      */
     fun startGuide(player: Player, route: GuideRoute): Boolean {
         val hadSession = sessions.containsKey(player.uniqueId)
         if (hadSession) stopSession(player)
 
-        // 1点目は開始時に完了扱いです。開始メッセージとして message を表示します。
         val first = route.points.first()
-        first.message.forEach { player.sendMessage(ChanponI18n.colorize(it)) }
-
-        if (route.points.size < 2) {
-            // 案内対象の中継点がないため、開始メッセージの表示のみで完了とします。
-            player.sendMessage(
-                ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_COMPLETED, "route" to route.label)
-            )
-            return hadSession
-        }
-
         val name = LegacyComponentSerializer.legacySection()
             .deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME))
         val entityId = renderer.spawn(
@@ -124,19 +126,16 @@ class GuideSessionService(
             first.yaw, first.pitch,
             name,
         )
-        val second = route.points[1]
         val session = GuideSession(
             player = player,
             route = route,
             entityId = entityId,
-            nextIndex = 1,
+            nextIndex = 0,
             x = first.x, y = first.y, z = first.z,
-            phase = Phase.FLYING,
+            phase = Phase.WAITING,
         )
         sessions[player.uniqueId] = session
-        // 開始時点で次の中継点への飛行姿勢へ向けます。
-        val (yaw, pitch) = GuideCourseMath.lookAngles(first.x, first.y, first.z, second.x, second.y, second.z)
-        renderer.moveTo(player, entityId, first.x, first.y, first.z, yaw, pitch)
+        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_AWAIT_FIRST_CLICK))
         return hadSession
     }
 
@@ -149,7 +148,7 @@ class GuideSessionService(
 
     /** ログアウト時の静かな破棄です。client 側の仮想実体も接続断で消えます。 */
     fun onQuit(player: Player) {
-        sessions.remove(player.uniqueId)?.let { renderer.destroy(player, it.entityId) }
+        sessions.remove(player.uniqueId)?.let { destroyEntities(it) }
     }
 
     /**
@@ -160,12 +159,20 @@ class GuideSessionService(
         val session = sessions[player.uniqueId] ?: return false
         if (player.world.name == session.route.worldName) return false
         sessions.remove(player.uniqueId)
-        renderer.destroy(player, session.entityId)
+        destroyEntities(session)
         return true
     }
 
     private fun stopSession(player: Player) {
-        sessions.remove(player.uniqueId)?.let { renderer.destroy(player, it.entityId) }
+        sessions.remove(player.uniqueId)?.let { destroyEntities(it) }
+    }
+
+    private fun destroyEntities(session: GuideSession) {
+        renderer.destroy(session.player, session.entityId)
+        if (session.displayEntityId != -1) {
+            renderer.destroy(session.player, session.displayEntityId)
+            session.displayEntityId = -1
+        }
     }
 
     /**
@@ -215,13 +222,30 @@ class GuideSessionService(
         session.offCourseTicks = 0
         if (session.nextIndex >= session.route.points.size) {
             sessions.remove(player.uniqueId)
-            renderer.destroy(player, session.entityId)
+            destroyEntities(session)
             player.sendMessage(
                 ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_COMPLETED, "route" to session.route.label)
             )
         } else {
             session.phase = Phase.FLYING
+            session.flight = planFlight(session, session.route.points[session.nextIndex])
         }
+    }
+
+    /**
+     * 現在位置から目標中継点への飛行経路です。誤差率の補完曲線を計画し、
+     * 不透過ブロックを避ける候補を採用します。
+     */
+    private fun planFlight(session: GuideSession, target: GuidePoint): GuideCourseMath.FlightPath =
+        planFlightTo(session, target.x, target.y, target.z)
+
+    private fun planFlightTo(session: GuideSession, tx: Double, ty: Double, tz: Double): GuideCourseMath.FlightPath {
+        val world = session.player.world
+        return GuideCourseMath.planFlightPath(
+            session.x, session.y, session.z,
+            tx, ty, tz,
+            settings.pathCurveDeviation,
+        ) { bx, by, bz -> world.getBlockAt(bx, by, bz).type.isOccluding }
     }
 
     private fun tickAll() {
@@ -241,7 +265,7 @@ class GuideSessionService(
         val player = session.player
         if (player.world.name != session.route.worldName) return
 
-        session.animTicks++
+        session.movingThisTick = false
         when (session.phase) {
             Phase.WAITING -> tickWaiting(session)
             Phase.FLYING, Phase.RETURNING -> tickFlight(session)
@@ -252,10 +276,12 @@ class GuideSessionService(
 
     /**
      * 論理位置に加える上下の単振動オフセットです。アレイの常時浮遊アニメーション
-     * として全フェーズで描画位置へ適用します。
+     * として全フェーズで描画位置へ適用し、移動中は周期を半分に速めます。
      */
-    private fun bobOffset(session: GuideSession): Double =
-        sin(session.animTicks * BOB_RADIANS_PER_TICK) * BOB_AMPLITUDE
+    private fun bobOffset(session: GuideSession): Double {
+        session.bobPhase += if (session.movingThisTick) BOB_RADIANS_MOVING else BOB_RADIANS_IDLE
+        return sin(session.bobPhase) * BOB_AMPLITUDE
+    }
 
     /**
      * 待機中は単振動による浮遊だけを行い、向きは中継点に設定された yaw を維持します。
@@ -263,56 +289,148 @@ class GuideSessionService(
     private fun tickWaiting(session: GuideSession) {
         val point = session.route.points[session.nextIndex]
         renderer.moveTo(session.player, session.entityId, point.x, point.y + bobOffset(session), point.z, point.yaw, point.pitch)
+        session.x = point.x
+        session.y = point.y
+        session.z = point.z
     }
 
+    /**
+     * 計画した曲線経路に沿って飛行し、移動方向へ体と頭を向けます。
+     * FLYING は次の中継点、RETURNING はコース復帰後の中継点へ向かいます。
+     */
     private fun tickFlight(session: GuideSession) {
         val target = session.route.points[session.nextIndex]
         val speed = if (session.phase == Phase.FLYING) settings.flightSpeed else settings.followFlightSpeed
-        val step = GuideCourseMath.stepToward(
-            session.x, session.y, session.z,
-            target.x, target.y, target.z,
-            speed / TICKS_PER_SECOND,
-        )
-        session.x = step.first
-        session.y = step.second
-        session.z = step.third
-        val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y, session.z, target.x, target.y, target.z)
-        renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, yaw, pitch)
+        val flight = session.flight ?: planFlight(session, target).also { session.flight = it }
 
-        if (GuideCourseMath.distanceSq(session.x, session.y, session.z, target.x, target.y, target.z) <= ARRIVAL_EPSILON_SQ) {
+        val prevX = session.x
+        val prevY = session.y
+        val prevZ = session.z
+        val pos = flight.advance(speed / TICKS_PER_SECOND)
+        session.x = pos.first
+        session.y = pos.second
+        session.z = pos.third
+        session.movingThisTick = !flight.finished
+
+        val moved = GuideCourseMath.distanceSq(prevX, prevY, prevZ, session.x, session.y, session.z)
+        val (yaw, pitch) = if (moved > FACING_MIN_MOVE_SQ) {
+            GuideCourseMath.lookAngles(prevX, prevY, prevZ, session.x, session.y, session.z)
+        } else {
+            target.yaw to target.pitch
+        }
+        val bob = bobOffset(session)
+        renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
+
+        if (flight.finished) {
             session.x = target.x
             session.y = target.y
             session.z = target.z
+            session.flight = null
             session.phase = Phase.WAITING
-            renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, target.yaw, target.pitch)
+            renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, target.yaw, target.pitch)
         }
     }
 
     /**
      * 追従モードです。アレイはコース境界の円筒面上（プレイヤー側）にある
-     * 占有可能な位置へ飛行して滞在し、体と頭を次の中継点方向へ向けて案内します。
-     * 占有可能な位置が見つからない間は現在位置を維持します。
+     * 占有可能な位置へ飛行して滞在し、静止中は次の中継点方向へ体と頭を
+     * 向けて案内します。占有可能な位置が見つからない間は現在位置を維持します。
+     *
+     * 案内は二系統のタイマーで行います。長周期のシステムチャットと、
+     * 短周期で切り替わるアレイ頭上のテキスト表示（効果音付き）です。
      */
     private fun tickFollowing(session: GuideSession) {
-        val player = session.player
+        session.followTicks++
         refreshAnchorIfNeeded(session)
+
+        var tx = session.x
+        var ty = session.y
+        var tz = session.z
         if (session.anchorValid) {
-            val step = GuideCourseMath.stepToward(
-                session.x, session.y, session.z,
-                session.anchorX, session.anchorY, session.anchorZ,
-                settings.followFlightSpeed / TICKS_PER_SECOND,
-            )
-            session.x = step.first
-            session.y = step.second
-            session.z = step.third
+            tx = session.anchorX
+            ty = session.anchorY
+            tz = session.anchorZ
         }
-        val target = session.route.points[session.nextIndex]
-        val (yaw, pitch) = GuideCourseMath.lookAngles(
-            session.x, session.y + ALLAY_HEIGHT / 2.0, session.z,
-            target.x, target.y, target.z,
-        )
-        renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, yaw, pitch)
+        val flight = session.flight ?: planFlightTo(session, tx, ty, tz).also { session.flight = it }
+        val prevX = session.x
+        val prevY = session.y
+        val prevZ = session.z
+        val pos = flight.advance(settings.followFlightSpeed / TICKS_PER_SECOND)
+        session.x = pos.first
+        session.y = pos.second
+        session.z = pos.third
+        session.movingThisTick = !flight.finished
+
+        // 移動中は移動方向を、静止中は次の中継点を指し示します。
+        val moved = GuideCourseMath.distanceSq(prevX, prevY, prevZ, session.x, session.y, session.z)
+        val (yaw, pitch) = if (moved > FACING_MIN_MOVE_SQ) {
+            GuideCourseMath.lookAngles(prevX, prevY, prevZ, session.x, session.y, session.z)
+        } else {
+            val target = session.route.points[session.nextIndex]
+            GuideCourseMath.lookAngles(
+                session.x, session.y + ALLAY_HEIGHT / 2.0, session.z,
+                target.x, target.y, target.z,
+            )
+        }
+        val bob = bobOffset(session)
+        renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
+        updateFollowDisplay(session, bob)
+
+        // 長周期のシステムチャットです。最初の発火後にアレイが発光を開始します。
+        val chatInterval = (settings.offCourseChatIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
+        if (session.followTicks % chatInterval == 0) {
+            session.player.sendMessage(ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_FOLLOW_PROMPT))
+            if (!session.glowing) {
+                session.glowing = true
+                renderer.setGlowing(session.player, session.entityId, true)
+            }
+        }
     }
+
+    /**
+     * 追従中のアレイ頭上テキストです。短い周期ごとに内容を順送りで切り替え、
+     * 切替時に効果音を再生します。アレイのCustomNameより高い位置に、
+     * 常時 viewer 正面を向くテキストディスプレイで表示します。
+     */
+    private fun updateFollowDisplay(session: GuideSession, allayBob: Double) {
+        val displayY = session.y + allayBob + DISPLAY_OFFSET
+        if (session.displayEntityId == -1) {
+            val interval = (settings.followDisplayIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
+            if (session.followTicks < interval) return
+            val texts = followDisplayTexts(session.player)
+            if (texts.isEmpty()) return
+            session.displayIndex = 0
+            session.displayEntityId = renderer.spawnTextDisplay(
+                session.player, session.x, displayY, session.z,
+                LegacyComponentSerializer.legacySection().deserialize(texts[0]),
+            )
+            playFollowCue(session)
+            return
+        }
+        renderer.moveTo(session.player, session.displayEntityId, session.x, displayY, session.z, 0f, 0f)
+
+        val interval = (settings.followDisplayIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
+        if (session.followTicks % interval != 0) return
+        val texts = followDisplayTexts(session.player)
+        if (texts.isEmpty()) return
+        session.displayIndex = (session.displayIndex + 1) % texts.size
+        renderer.setTextDisplayText(
+            session.player, session.displayEntityId,
+            LegacyComponentSerializer.legacySection().deserialize(texts[session.displayIndex]),
+        )
+        playFollowCue(session)
+    }
+
+    private fun playFollowCue(session: GuideSession) {
+        session.player.playSound(
+            session.player.location.set(session.x, session.y, session.z),
+            Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM,
+            0.8f, 1.4f,
+        )
+    }
+
+    private fun followDisplayTexts(player: Player): List<String> =
+        ChanponI18n.list(player, Keys.CHANPON_UTILITIES_GUIDE_FOLLOW_DISPLAY)
 
     /**
      * プレイヤーが動いたときだけ追従アンカーを再計算し、ブロック占有判定で
@@ -342,18 +460,23 @@ class GuideSessionService(
                 session.anchorY = y
                 session.anchorZ = z
                 session.anchorValid = true
+                session.flight = planFlightTo(session, x, y, z)
                 return
             }
         }
+        // 占有可能な候補が全滅した場合は、古いアンカーへ向かわずその場に留まります。
+        session.flight = null
     }
 
     /**
      * コース逸脱判定です。現在区間（直近完了点→次の中継点）を軸とする
      * 3Dカプセルの外に猶予時間より長く留まると追従モードへ入り、
      * 戻るとアレイは中継点へ帰還します。
+     *
+     * 1点目の完了前は「現在区間」が未定義のため、逸脱判定を行いません。
      */
     private fun checkOffCourse(session: GuideSession) {
-        if (session.nextIndex >= session.route.points.size) return
+        if (session.nextIndex == 0 || session.nextIndex >= session.route.points.size) return
         val player = session.player
         val prev = session.route.points[session.nextIndex - 1]
         val next = session.route.points[session.nextIndex]
@@ -362,11 +485,10 @@ class GuideSessionService(
             loc.x, loc.y, loc.z, prev, next, settings.courseRadius,
         )
         if (onCourse) {
-            if (session.phase == Phase.FOLLOWING) {
-                session.phase = Phase.RETURNING
-                player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_RETURNED))
-            }
             session.offCourseTicks = 0
+            if (session.phase == Phase.FOLLOWING) {
+                exitFollowing(session)
+            }
             return
         }
         session.offCourseTicks++
@@ -374,19 +496,28 @@ class GuideSessionService(
         if (session.phase == Phase.WAITING && session.offCourseTicks >= graceTicks) {
             session.phase = Phase.FOLLOWING
             session.anchorValid = false
-            sendFollowPrompt(session)
-        } else if (session.phase == Phase.FOLLOWING) {
-            val intervalMillis = (settings.followMessageIntervalSeconds * 1_000).toLong()
-            val now = System.currentTimeMillis()
-            if (now - session.lastPromptAtMillis >= intervalMillis) {
-                sendFollowPrompt(session)
-            }
+            session.followTicks = 0
+            session.displayIndex = 0
+            session.flight = null
         }
     }
 
-    private fun sendFollowPrompt(session: GuideSession) {
-        session.lastPromptAtMillis = System.currentTimeMillis()
-        session.player.sendMessage(ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_FOLLOW_PROMPT))
+    /**
+     * 追従モードを抜け、コース上の中継点へ帰還する状態へ遷移します。
+     * 案内表示・発光を解除し、帰還経路を計画します。
+     */
+    private fun exitFollowing(session: GuideSession) {
+        session.phase = Phase.RETURNING
+        session.player.sendMessage(ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_RETURNED))
+        if (session.displayEntityId != -1) {
+            renderer.destroy(session.player, session.displayEntityId)
+            session.displayEntityId = -1
+        }
+        if (session.glowing) {
+            session.glowing = false
+            renderer.setGlowing(session.player, session.entityId, false)
+        }
+        session.flight = planFlight(session, session.route.points[session.nextIndex])
     }
 
     /**
@@ -408,16 +539,20 @@ class GuideSessionService(
 
     private companion object {
         const val TICKS_PER_SECOND = 20.0
-        /** 中継点への到達判定の許容誤差です。 */
-        const val ARRIVAL_EPSILON_SQ = 0.01
 
-        // 常時の単振動アニメーションです。1tickごとの位相進行で周期は約3秒です。
-        const val BOB_RADIANS_PER_TICK = Math.PI / 30.0
+        // 常時の単振動アニメーションです。待機・静止時の周期は約3秒、
+        // 移動中は半分の約1.5秒に速めて飛行感を出します。
+        const val BOB_RADIANS_IDLE = Math.PI / 30.0
+        const val BOB_RADIANS_MOVING = Math.PI / 15.0
         const val BOB_AMPLITUDE = 0.15
         /** Allay の当たり判定サイズです（NMS の ALLAY 寸法 0.35 x 0.6）。 */
         const val ALLAY_HALF_WIDTH = 0.175
         const val ALLAY_HEIGHT = 0.6
         /** 追従アンカーの再計算を行うプレイヤー移動量の閾値（二乗）です。 */
         const val ANCHOR_REFRESH_MOVE_SQ = 0.25 * 0.25
+        /** 移動方向へ向きを変える最小移動量（二乗）です。 */
+        const val FACING_MIN_MOVE_SQ = 0.002 * 0.002
+        /** 追従表示のテキストディスプレイを置く、足元からの高さです。 */
+        const val DISPLAY_OFFSET = 1.55
     }
 }

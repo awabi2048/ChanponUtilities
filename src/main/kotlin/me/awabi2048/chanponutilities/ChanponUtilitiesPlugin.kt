@@ -198,6 +198,22 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                                 config.set("features.guide_array.follow_flight_speed", 6.0)
                             }
                         },
+                        9 to ConfigMigration { config ->
+                            // 逸脱案内の二重タイマー化に伴い、旧周期キーを系統別の
+                            // 周期へ置き換えます。コース円筒半径は仕様変更で半減し、
+                            // 曲線飛行の誤差率を追加します。
+                            if (config.getDouble("features.guide_array.course_radius", 8.0) == 8.0) {
+                                config.set("features.guide_array.course_radius", 4.0)
+                            }
+                            config.set("features.guide_array.follow_message_interval_seconds", null)
+                            config.set("features.guide_array.off_course_chat_interval_seconds", 60.0)
+                            if (!config.contains("features.guide_array.follow_display_interval_seconds")) {
+                                config.set("features.guide_array.follow_display_interval_seconds", 10.0)
+                            }
+                            if (!config.contains("features.guide_array.path_curve_deviation")) {
+                                config.set("features.guide_array.path_curve_deviation", 0.15)
+                            }
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -272,11 +288,13 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                 guideRouteStore = store
                 val settings = GuideSessionService.GuideSettings(
                     clickDistance = config.getDouble("features.guide_array.click_distance", 4.5),
-                    courseRadius = config.getDouble("features.guide_array.course_radius", 8.0),
+                    courseRadius = config.getDouble("features.guide_array.course_radius", 4.0),
                     offCourseGraceSeconds = config.getDouble("features.guide_array.off_course_grace_seconds", 10.0),
-                    followMessageIntervalSeconds = config.getDouble("features.guide_array.follow_message_interval_seconds", 5.0),
+                    offCourseChatIntervalSeconds = config.getDouble("features.guide_array.off_course_chat_interval_seconds", 60.0),
+                    followDisplayIntervalSeconds = config.getDouble("features.guide_array.follow_display_interval_seconds", 10.0),
                     flightSpeed = config.getDouble("features.guide_array.flight_speed", 4.0),
                     followFlightSpeed = config.getDouble("features.guide_array.follow_flight_speed", 6.0),
+                    pathCurveDeviation = config.getDouble("features.guide_array.path_curve_deviation", 0.15),
                 )
                 val service = GuideSessionService(this, settings)
                 guideSessionService = service
@@ -416,11 +434,23 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         require(config.getDouble("features.guide_array.off_course_grace_seconds") >= 0.0) {
             "features.guide_array.off_course_grace_seconds must not be negative"
         }
-        require(config.get("features.guide_array.follow_message_interval_seconds") is Number) {
-            "features.guide_array.follow_message_interval_seconds must be a number"
+        require(config.get("features.guide_array.off_course_chat_interval_seconds") is Number) {
+            "features.guide_array.off_course_chat_interval_seconds must be a number"
         }
-        require(config.getDouble("features.guide_array.follow_message_interval_seconds") > 0.0) {
-            "features.guide_array.follow_message_interval_seconds must be positive"
+        require(config.getDouble("features.guide_array.off_course_chat_interval_seconds") > 0.0) {
+            "features.guide_array.off_course_chat_interval_seconds must be positive"
+        }
+        require(config.get("features.guide_array.follow_display_interval_seconds") is Number) {
+            "features.guide_array.follow_display_interval_seconds must be a number"
+        }
+        require(config.getDouble("features.guide_array.follow_display_interval_seconds") > 0.0) {
+            "features.guide_array.follow_display_interval_seconds must be positive"
+        }
+        require(config.get("features.guide_array.path_curve_deviation") is Number) {
+            "features.guide_array.path_curve_deviation must be a number"
+        }
+        require(config.getDouble("features.guide_array.path_curve_deviation") in 0.0..1.0) {
+            "features.guide_array.path_curve_deviation must be between 0 and 1"
         }
         require(config.get("features.guide_array.flight_speed") is Number) {
             "features.guide_array.flight_speed must be a number"
@@ -487,7 +517,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 9
+        const val CONFIG_VERSION = 10
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }

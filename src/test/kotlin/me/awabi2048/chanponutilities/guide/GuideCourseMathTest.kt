@@ -146,4 +146,69 @@ class GuideCourseMathTest {
         // 中心 x=0.5 → maxX=0.675 < 1.0 で重ならない
         assertTrue(GuideCourseMath.canOccupy(0.5, 0.0, 0.5, 0.175, 0.6, hasCollision))
     }
+
+    @Test
+    fun `flight path deviates laterally by the configured ratio when clear`() {
+        // (0,0,0)→(0,0,20)、誤差率0.15。全空のため最優先の水平曲線が選ばれ、
+        // 中点での横ずれがおおよそ 20*0.15=3 になることを確認します。
+        val path = GuideCourseMath.planFlightPath(0.0, 64.0, 0.0, 0.0, 64.0, 20.0, 0.15) { _, _, _ -> false }
+        val mid = path.pointAt(path.totalLength / 2.0)
+        val deviation = kotlin.math.sqrt(
+            GuideCourseMath.distanceSq(mid.first, 0.0, mid.third, 0.0, 0.0, 10.0),
+        )
+        assertTrue(abs(deviation - 1.5) < 0.6, "中点の横ずれが誤差率とかけ離れています: $deviation")
+        // 始点・終点は正確に通る
+        val start = path.pointAt(0.0)
+        assertEquals(0.0, start.first, 1e-9)
+        assertEquals(0.0, start.third, 1e-9)
+    }
+
+    @Test
+    fun `flight path routes around opaque blocks when straight line is blocked`() {
+        // (0,0,0)→(0,0,20) の直線上 z=10 に不透過ブロックの柱がある世界です。
+        // 曲線のどれかが回り込めるはずなので、標本点が不透過を通らない経路を返します。
+        val pillar = setOf(Triple(0, 64, 10))
+        val path = GuideCourseMath.planFlightPath(0.0, 64.0, 0.0, 0.0, 64.0, 20.0, 0.15) { bx, by, bz ->
+            Triple(bx, by, bz) in pillar
+        }
+        val steps = path.totalLength.toInt() + 1
+        for (i in 0..steps) {
+            val p = path.pointAt(path.totalLength * i / steps)
+            assertFalse(
+                Triple(
+                    kotlin.math.floor(p.first).toInt(),
+                    kotlin.math.floor(p.second).toInt(),
+                    kotlin.math.floor(p.third).toInt(),
+                ) in pillar,
+                "経路が不透過ブロックを通っています: $p",
+            )
+        }
+    }
+
+    @Test
+    fun `flight path falls back to straight when every curve is blocked`() {
+        // 全候補のオフセットを覆う箱型の不透過領域があり、どの曲線候補も
+        // 触れる場合は直線へ戻ります。
+        val wall = (-4..4).flatMap { x ->
+            (63..66).flatMap { y ->
+                (9..11).map { z -> Triple(x, y, z) }
+            }
+        }.toSet()
+        val path = GuideCourseMath.planFlightPath(0.0, 64.0, 0.0, 0.0, 64.0, 20.0, 0.15) { bx, by, bz ->
+            Triple(bx, by, bz) in wall
+        }
+        // 直線フォールバックでは中点が線分上にある
+        val mid = path.pointAt(path.totalLength / 2.0)
+        assertEquals(0.0, mid.first, 1e-9)
+        assertEquals(64.0, mid.second, 1e-9)
+        assertEquals(10.0, mid.third, 1e-9)
+    }
+
+    @Test
+    fun `flight path is straight for short hops`() {
+        val path = GuideCourseMath.planFlightPath(0.0, 64.0, 0.0, 1.0, 64.0, 1.0, 0.15) { _, _, _ -> false }
+        val mid = path.pointAt(path.totalLength / 2.0)
+        assertEquals(0.5, mid.first, 1e-9)
+        assertEquals(0.5, mid.third, 1e-9)
+    }
 }

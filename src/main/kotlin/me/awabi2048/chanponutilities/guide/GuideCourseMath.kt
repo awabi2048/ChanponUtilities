@@ -186,4 +186,132 @@ object GuideCourseMath {
         val dz = az - bz
         return dx * dx + dy * dy + dz * dz
     }
+
+    /**
+     * 移動経路です。補完曲線を折れ線標本として保持し、進行距離に応じた
+     * 位置を返します。
+     */
+    class FlightPath private constructor(
+        private val points: List<Triple<Double, Double, Double>>,
+        private val cumulative: DoubleArray,
+    ) {
+        val totalLength: Double get() = cumulative[cumulative.size - 1]
+
+        var traveled: Double = 0.0
+            private set
+
+        val finished: Boolean get() = traveled >= totalLength - 1.0e-6
+
+        fun advance(distance: Double): Triple<Double, Double, Double> {
+            traveled = (traveled + distance).coerceAtMost(totalLength)
+            return pointAt(traveled)
+        }
+
+        fun pointAt(distance: Double): Triple<Double, Double, Double> {
+            val d = distance.coerceIn(0.0, totalLength)
+            var lo = 0
+            var hi = cumulative.size - 1
+            while (lo + 1 < hi) {
+                val mid = (lo + hi) / 2
+                if (cumulative[mid] <= d) lo = mid else hi = mid
+            }
+            val segment = cumulative[hi] - cumulative[lo]
+            val t = if (segment <= 0.0) 0.0 else (d - cumulative[lo]) / segment
+            return Triple(
+                points[lo].first + (points[hi].first - points[lo].first) * t,
+                points[lo].second + (points[hi].second - points[lo].second) * t,
+                points[lo].third + (points[hi].third - points[lo].third) * t,
+            )
+        }
+
+        companion object {
+            fun of(points: List<Triple<Double, Double, Double>>): FlightPath {
+                val cumulative = DoubleArray(points.size)
+                var sum = 0.0
+                for (i in 1 until points.size) {
+                    sum += sqrt(distanceSq(
+                        points[i - 1].first, points[i - 1].second, points[i - 1].third,
+                        points[i].first, points[i].second, points[i].third,
+                    ))
+                    cumulative[i] = sum
+                }
+                return FlightPath(points, cumulative)
+            }
+        }
+    }
+
+    /**
+     * 飛行経路を計画します。
+     *
+     * 直線距離の `deviationRatio`（誤差率）だけ中点からずらした制御点を持つ
+     * 二次ベジェ曲線を標本化して返します。候補は進行方向に垂直な水平面内の
+     * 左右・斜め上・真上で、標本点が不透過ブロック内に入らない最初のものを
+     * 採用します。すべての曲線候補が不透過ブロックに触れる場合は直線へ
+     * フォールバックします。短距離では曲線の効果が見えないため直線を返します。
+     *
+     * `isOpaque` はブロック座標の不透過判定述語です。
+     */
+    fun planFlightPath(
+        fx: Double, fy: Double, fz: Double,
+        tx: Double, ty: Double, tz: Double,
+        deviationRatio: Double,
+        isOpaque: (blockX: Int, blockY: Int, blockZ: Int) -> Boolean,
+    ): FlightPath {
+        val from = Triple(fx, fy, fz)
+        val to = Triple(tx, ty, tz)
+        val dx = tx - fx
+        val dy = ty - fy
+        val dz = tz - fz
+        val length = sqrt(dx * dx + dy * dy + dz * dz)
+        if (length < CURVE_MIN_DISTANCE) {
+            return FlightPath.of(listOf(from, to))
+        }
+
+        val deviation = length * deviationRatio
+        val midX = fx + dx * 0.5
+        val midY = fy + dy * 0.5
+        val midZ = fz + dz * 0.5
+
+        // 候補の制御点オフセットです。水平垂直方向を優先し、上方向は
+        // 距離に対して控えめな高さに留めます。
+        val offsets = mutableListOf<Triple<Double, Double, Double>>()
+        val horizontal = sqrt(dx * dx + dz * dz)
+        if (horizontal > 1.0e-6) {
+            val px = -dz / horizontal * deviation
+            val pz = dx / horizontal * deviation
+            offsets += Triple(px, 0.0, pz)
+            offsets += Triple(-px, 0.0, -pz)
+            offsets += Triple(px * 0.5, deviation * 0.5, pz * 0.5)
+            offsets += Triple(-px * 0.5, deviation * 0.5, -pz * 0.5)
+        }
+        offsets += Triple(0.0, deviation * 0.7, 0.0)
+        // 全幅が置けない場合の縮小幅フォールバックです。
+        val shrunk = offsets.map { (ox, oy, oz) -> Triple(ox * 0.5, oy * 0.5, oz * 0.5) }
+        offsets += shrunk
+
+        val samples = maxOf(MIN_CURVE_SAMPLES, kotlin.math.ceil(length / 1.5).toInt())
+        for ((ox, oy, oz) in offsets) {
+            val points = (0..samples).map { step ->
+                val t = step.toDouble() / samples
+                Triple(
+                    quadratic(fx, midX + ox, tx, t),
+                    quadratic(fy, midY + oy, ty, t),
+                    quadratic(fz, midZ + oz, tz, t),
+                )
+            }
+            val blocked = points.any { (px, py, pz) ->
+                isOpaque(floor(px).toInt(), floor(py).toInt(), floor(pz).toInt())
+            }
+            if (!blocked) return FlightPath.of(points)
+        }
+        return FlightPath.of(listOf(from, to))
+    }
+
+    private fun quadratic(p0: Double, p1: Double, p2: Double, t: Double): Double {
+        val u = 1.0 - t
+        return u * u * p0 + 2.0 * u * t * p1 + t * t * p2
+    }
+
+    private const val CURVE_MIN_DISTANCE = 2.0
+    private const val MIN_CURVE_SAMPLES = 8
 }

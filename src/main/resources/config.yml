@@ -28,11 +28,13 @@ features:
   guide_array:
     enabled: true
     click_distance: 4.5
-    course_radius: 8.0
+    course_radius: 4.0
     off_course_grace_seconds: 10.0
-    follow_message_interval_seconds: 5.0
+    off_course_chat_interval_seconds: 60.0
+    follow_display_interval_seconds: 10.0
     flight_speed: 4.0
     follow_flight_speed: 6.0
+    path_curve_deviation: 0.15
 
 effects:
   link_success:
@@ -60,4 +62,4 @@ command_safeguard:
     - "/kill @e[]"
     - "/kill @e"
 
-config_version: 9
+config_version: 10
