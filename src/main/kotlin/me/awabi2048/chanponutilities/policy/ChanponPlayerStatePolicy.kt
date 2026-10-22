@@ -13,9 +13,12 @@ class ChanponPlayerStatePolicy : WorldPlayerStatePolicy {
     override fun evaluate(player: Player, worldData: WorldData): WorldPlayerStateDecision {
         val admin = isAdmin(player)
         val builder = ChanponPlayerStateRules.isBuilder(player.uniqueId, worldData.owner, worldData.members, admin)
-        // ワールドポリシーは建築・飛行制約だけを返し、ゲームモードは変更しません。
+        // ワールドポリシーは飛行制約だけを返し、ゲームモードは変更しません。
+        // 建築可否は WorldGuard の __global__ フラグ判定へ一元化するため、
+        // このポリシーは buildAllowed に意見を返しません（null）。
+        // 保護モード（PUBLIC 等）を参照しない拒否が WorldGuard の許可を上書きするのを防ぎます。
         return WorldPlayerStateDecision(
-            buildAllowed = builder,
+            buildAllowed = null,
             flightAllowed = ChanponPlayerStateRules.flightAllowed(worldData.allowFlight, builder, admin)
         )
     }
