@@ -42,7 +42,6 @@ class GuideSessionService(
         val followDisplayIntervalSeconds: Double,
         val flightSpeed: Double,
         val followFlightSpeed: Double,
-        val pathCurveDeviation: Double,
         val debug: Boolean = false,
     )
 
@@ -89,6 +88,7 @@ class GuideSessionService(
         var particleTicks: Int = 0,
         var speedPerTick: Double = 0.0,
         var movementNoisePhase: Double = 0.0,
+        var pathRetryTicks: Int = 0,
     )
 
     fun start() {
@@ -236,10 +236,7 @@ class GuideSessionService(
         }
     }
 
-    /**
-     * 現在位置から目標中継点への飛行経路です。誤差率の補完曲線を計画し、
-     * 不透過ブロックを避ける候補を採用します。
-     */
+    /** 中間点を通り、通過できることを確認した経路だけを返します。 */
     private fun planFlight(session: GuideSession, target: GuidePoint): GuideCourseMath.FlightPath? {
         val midpoint = session.route.midpoints[session.nextIndex]
         val start = Triple(session.x, session.y, session.z)
@@ -390,7 +387,15 @@ class GuideSessionService(
     private fun tickFlight(session: GuideSession) {
         val target = session.route.points[session.nextIndex]
         val speed = if (session.phase == Phase.FLYING) settings.flightSpeed else settings.followFlightSpeed
-        val flight = session.flight ?: return
+        // 経路が見つからない場合は静止し、チャンクの読込や障害物の変化を待って再試行します。
+        val flight = session.flight ?: run {
+            if (++session.pathRetryTicks % 100 == 0) {
+                session.flight = planFlight(session, target)
+                if (session.phase == Phase.FLYING && session.flight != null) session.coursePath = session.flight
+            }
+            return
+        }
+        session.pathRetryTicks = 0
 
         val prevX = session.x
         val prevY = session.y
@@ -422,8 +427,8 @@ class GuideSessionService(
     }
 
     /**
-     * 追従モードです。アレイはコース境界の円筒面上（プレイヤー側）にある
-     * 占有可能な位置へ飛行して滞在し、静止中は次の中継点方向へ体と頭を
+     * 追従モードです。アレイはプレイヤーから約2ブロックの占有可能な位置へ
+     * 飛行して滞在し、静止中は次の中継点方向へ体と頭を
      * 向けて案内します。占有可能な位置が見つからない間は現在位置を維持します。
      *
      * 案内は二系統のタイマーで行います。長周期のシステムチャットと、
@@ -441,15 +446,17 @@ class GuideSessionService(
             ty = session.anchorY
             tz = session.anchorZ
         }
-        val flight = session.flight ?: return
+        val flight = session.flight
         val prevX = session.x
         val prevY = session.y
         val prevZ = session.z
-        val pos = flight.advance(flightStep(session, flight, settings.followFlightSpeed))
-        session.x = pos.first
-        session.y = pos.second
-        session.z = pos.third
-        session.movingThisTick = !flight.finished
+        if (flight != null) {
+            val pos = flight.advance(flightStep(session, flight, settings.followFlightSpeed))
+            session.x = pos.first
+            session.y = pos.second
+            session.z = pos.third
+            session.movingThisTick = !flight.finished
+        }
 
         // 移動中は移動方向を、静止中は次の中継点を指し示します。
         val moved = GuideCourseMath.distanceSq(prevX, prevY, prevZ, session.x, session.y, session.z)
@@ -524,13 +531,16 @@ class GuideSessionService(
 
     /**
      * プレイヤーが動いたときだけ追従アンカーを再計算し、ブロック占有判定で
-     * 置ける位置を選びます。候補はコース境界円筒の側面上（プレイヤー側）です。
+     * 置ける位置を選びます。高さは追従開始時のプレイヤーの足元を基準に固定します。
      */
     private fun refreshAnchorIfNeeded(session: GuideSession) {
         val loc = session.player.location
+        // 頻繁な位置更新で探索が毎 tick 走らないよう、再計画の頻度を制限します。
+        if (session.anchorValid && session.followTicks % 10 != 1) return
+        if (!session.anchorValid && session.followTicks % 100 != 1) return
         if (!loc.x.isNaN() &&
             GuideCourseMath.distanceSq(loc.x, 0.0, loc.z, session.anchorPlayerX, 0.0, session.anchorPlayerZ) <= ANCHOR_REFRESH_MOVE_SQ &&
-            session.anchorValid
+            session.anchorValid && (session.flight != null || session.followTicks % 100 != 0)
         ) return
         session.anchorPlayerX = loc.x
         if (session.anchorPlayerY.isNaN()) session.anchorPlayerY = loc.y
@@ -547,11 +557,12 @@ class GuideSessionService(
         }
         for ((x, y, z) in candidates) {
             if (canOccupyAllay(session.player.world, x, y, z)) {
+                val flight = planFlightTo(session, x, y, z) ?: continue
                 session.anchorX = x
                 session.anchorY = y
                 session.anchorZ = z
                 session.anchorValid = true
-                session.flight = planFlightTo(session, x, y, z)
+                session.flight = flight
                 return
             }
         }

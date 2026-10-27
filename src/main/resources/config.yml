@@ -35,7 +35,6 @@ features:
     follow_display_interval_seconds: 10.0
     flight_speed: 4.0
     follow_flight_speed: 6.0
-    path_curve_deviation: 0.15
 
 effects:
   link_success:
@@ -63,4 +62,4 @@ command_safeguard:
     - "/kill @e[]"
     - "/kill @e"
 
-config_version: 10
+config_version: 11

@@ -214,6 +214,11 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                                 config.set("features.guide_array.path_curve_deviation", 0.15)
                             }
                         },
+                        10 to ConfigMigration { config ->
+                            // 旧曲線設定を廃止し、デバッグ表示を明示的に管理します。
+                            config.set("features.guide_array.path_curve_deviation", null)
+                            if (!config.contains("features.guide_array.debug")) config.set("features.guide_array.debug", false)
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -294,7 +299,6 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     followDisplayIntervalSeconds = config.getDouble("features.guide_array.follow_display_interval_seconds", 10.0),
                     flightSpeed = config.getDouble("features.guide_array.flight_speed", 4.0),
                     followFlightSpeed = config.getDouble("features.guide_array.follow_flight_speed", 6.0),
-                    pathCurveDeviation = config.getDouble("features.guide_array.path_curve_deviation", 0.15),
                     debug = config.getBoolean("features.guide_array.debug", false),
                 )
                 val service = GuideSessionService(this, settings)
@@ -447,12 +451,6 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         require(config.getDouble("features.guide_array.follow_display_interval_seconds") > 0.0) {
             "features.guide_array.follow_display_interval_seconds must be positive"
         }
-        require(config.get("features.guide_array.path_curve_deviation") is Number) {
-            "features.guide_array.path_curve_deviation must be a number"
-        }
-        require(config.getDouble("features.guide_array.path_curve_deviation") in 0.0..1.0) {
-            "features.guide_array.path_curve_deviation must be between 0 and 1"
-        }
         require(config.get("features.guide_array.flight_speed") is Number) {
             "features.guide_array.flight_speed must be a number"
         }
@@ -518,7 +516,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 10
+        const val CONFIG_VERSION = 11
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }
