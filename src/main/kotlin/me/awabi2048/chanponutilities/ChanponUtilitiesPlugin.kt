@@ -295,6 +295,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     flightSpeed = config.getDouble("features.guide_array.flight_speed", 4.0),
                     followFlightSpeed = config.getDouble("features.guide_array.follow_flight_speed", 6.0),
                     pathCurveDeviation = config.getDouble("features.guide_array.path_curve_deviation", 0.15),
+                    debug = config.getBoolean("features.guide_array.debug", false),
                 )
                 val service = GuideSessionService(this, settings)
                 guideSessionService = service

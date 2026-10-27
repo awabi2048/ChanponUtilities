@@ -27,6 +27,7 @@ features:
     enabled: true
   guide_array:
     enabled: true
+    debug: false
     click_distance: 4.5
     course_radius: 4.0
     off_course_grace_seconds: 10.0

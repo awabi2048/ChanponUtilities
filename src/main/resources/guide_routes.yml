@@ -13,6 +13,9 @@
 #
 # ゲーム内では /guide admin setpoint <route> <index> で現在位置・向きを
 # 中継点として保存でき、/guide admin reload でこのファイルを再読込します。
+# /guide admin setpoint <route> 3.5 は3番と4番の間の通過点を保存します。
+# 中間点は midpoints の区間番号をキーとして保存され、クリック・待機はありません。
+# 例: midpoints: {"3": {x: 10.5, y: 65.0, z: 5.5}}
 
 routes:
   # サンプル:

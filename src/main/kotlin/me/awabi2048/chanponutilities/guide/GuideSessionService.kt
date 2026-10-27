@@ -43,6 +43,7 @@ class GuideSessionService(
         val flightSpeed: Double,
         val followFlightSpeed: Double,
         val pathCurveDeviation: Double,
+        val debug: Boolean = false,
     )
 
     private enum class Phase {
@@ -72,6 +73,7 @@ class GuideSessionService(
         var lastClickPromptAtMillis: Long = 0L,
         var bobPhase: Double = 0.0,
         var flight: GuideCourseMath.FlightPath? = null,
+        var coursePath: GuideCourseMath.FlightPath? = null,
         var anchorX: Double = 0.0,
         var anchorY: Double = 0.0,
         var anchorZ: Double = 0.0,
@@ -229,6 +231,8 @@ class GuideSessionService(
         } else {
             session.phase = Phase.FLYING
             session.flight = planFlight(session, session.route.points[session.nextIndex])
+            session.coursePath = session.flight
+            if (session.flight == null) plugin.logger.warning("ガイド経路を探索できません: route=${session.route.id}, point=${session.nextIndex + 1}")
         }
     }
 
@@ -236,16 +240,32 @@ class GuideSessionService(
      * 現在位置から目標中継点への飛行経路です。誤差率の補完曲線を計画し、
      * 不透過ブロックを避ける候補を採用します。
      */
-    private fun planFlight(session: GuideSession, target: GuidePoint): GuideCourseMath.FlightPath =
-        planFlightTo(session, target.x, target.y, target.z)
+    private fun planFlight(session: GuideSession, target: GuidePoint): GuideCourseMath.FlightPath? {
+        val midpoint = session.route.midpoints[session.nextIndex]
+        val start = Triple(session.x, session.y, session.z)
+        val end = Triple(target.x, target.y, target.z)
+        if (midpoint == null || session.phase != Phase.FLYING) return findPath(session, start, end)
+        val via = Triple(midpoint.x, midpoint.y, midpoint.z)
+        val first = findPath(session, start, via) ?: return null
+        val second = findPath(session, via, end) ?: return null
+        return GuideCourseMath.FlightPath.of(first.points + second.points.drop(1))
+    }
 
-    private fun planFlightTo(session: GuideSession, tx: Double, ty: Double, tz: Double): GuideCourseMath.FlightPath {
+    private fun planFlightTo(session: GuideSession, tx: Double, ty: Double, tz: Double): GuideCourseMath.FlightPath? =
+        findPath(session, Triple(session.x, session.y, session.z), Triple(tx, ty, tz))
+
+    private fun findPath(session: GuideSession, from: Triple<Double, Double, Double>, to: Triple<Double, Double, Double>): GuideCourseMath.FlightPath? {
         val world = session.player.world
-        return GuideCourseMath.planFlightPath(
-            session.x, session.y, session.z,
-            tx, ty, tz,
-            settings.pathCurveDeviation,
-        ) { bx, by, bz -> world.getBlockAt(bx, by, bz).type.isOccluding }
+        val points = GuidePathfinder.find(from, to) { x, y, z ->
+            // 標本点の間隔分だけ判定範囲を広げ、標本間の衝突も保守的に防ぎます。
+            GuideCourseMath.canOccupy(x, y, z, ALLAY_HALF_WIDTH + 0.1, ALLAY_HEIGHT + 0.1) { bx, by, bz, minX, minY, minZ, maxX, maxY, maxZ ->
+                if (!world.isChunkLoaded(bx shr 4, bz shr 4)) return@canOccupy true
+                world.getBlockAt(bx, by, bz).collisionShape.boundingBoxes.any { box ->
+                    box.overlaps(BoundingBox(minX - bx, minY - by, minZ - bz, maxX - bx, maxY - by, maxZ - bz))
+                }
+            }
+        } ?: return null
+        return GuideCourseMath.FlightPath.of(points)
     }
 
     private fun tickAll() {
@@ -273,6 +293,33 @@ class GuideSessionService(
         }
         checkOffCourse(session)
         showParticles(session)
+        if (settings.debug && session.particleTicks % 10 == 0) showDebug(session)
+    }
+
+    /** 実際の判定で使う折れ線と、その周囲の断面を可視化します。 */
+    private fun showDebug(session: GuideSession) {
+        val path = session.coursePath ?: return
+        val count = kotlin.math.ceil(path.totalLength).toInt().coerceIn(1, 200)
+        for (i in 0..count) {
+            val d = path.totalLength * i / count
+            val point = path.pointAt(d)
+            session.player.spawnParticle(Particle.END_ROD, point.first, point.second, point.third, 1, 0.0, 0.0, 0.0, 0.0)
+            if (i % 4 != 0) continue
+            val before = path.pointAt((d - 0.1).coerceAtLeast(0.0))
+            val after = path.pointAt((d + 0.1).coerceAtMost(path.totalLength))
+            val direction = org.bukkit.util.Vector(after.first - before.first, after.second - before.second, after.third - before.third)
+            if (direction.lengthSquared() < 1.0e-9) continue
+            direction.normalize()
+            val reference = if (kotlin.math.abs(direction.y) > 0.9) org.bukkit.util.Vector(1, 0, 0) else org.bukkit.util.Vector(0, 1, 0)
+            val u = direction.clone().crossProduct(reference).normalize()
+            val v = direction.clone().crossProduct(u).normalize()
+            for (n in 0 until 12) {
+                val angle = n * Math.PI / 6.0
+                val offset = u.clone().multiply(cos(angle) * settings.courseRadius).add(v.clone().multiply(sin(angle) * settings.courseRadius))
+                session.player.spawnParticle(Particle.DUST, point.first + offset.x, point.second + offset.y, point.third + offset.z,
+                    1, 0.0, 0.0, 0.0, 0.0, Particle.DustOptions(org.bukkit.Color.AQUA, 0.8f))
+            }
+        }
     }
 
     /** 演出は案内対象のプレイヤーにだけ送信します。 */
@@ -343,7 +390,7 @@ class GuideSessionService(
     private fun tickFlight(session: GuideSession) {
         val target = session.route.points[session.nextIndex]
         val speed = if (session.phase == Phase.FLYING) settings.flightSpeed else settings.followFlightSpeed
-        val flight = session.flight ?: planFlight(session, target).also { session.flight = it }
+        val flight = session.flight ?: return
 
         val prevX = session.x
         val prevY = session.y
@@ -394,7 +441,7 @@ class GuideSessionService(
             ty = session.anchorY
             tz = session.anchorZ
         }
-        val flight = session.flight ?: planFlightTo(session, tx, ty, tz).also { session.flight = it }
+        val flight = session.flight ?: return
         val prevX = session.x
         val prevY = session.y
         val prevZ = session.z
@@ -525,9 +572,12 @@ class GuideSessionService(
         val prev = session.route.points[session.nextIndex - 1]
         val next = session.route.points[session.nextIndex]
         val loc = player.location
-        val onCourse = GuideCourseMath.isOnCourse(
-            loc.x, loc.y, loc.z, prev, next, settings.courseRadius,
-        )
+        val points = session.coursePath?.points ?: listOf(
+            Triple(prev.x, prev.y, prev.z), Triple(next.x, next.y, next.z))
+        val onCourse = points.zipWithNext().any { (a, b) ->
+            GuideCourseMath.distanceToSegment(loc.x, loc.y, loc.z,
+                a.first, a.second, a.third, b.first, b.second, b.third) <= settings.courseRadius
+        }
         if (onCourse) {
             session.offCourseTicks = 0
             if (session.phase == Phase.FOLLOWING) {

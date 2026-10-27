@@ -30,6 +30,7 @@ data class GuideRoute(
     val worldName: String,
     val displayName: String?,
     val points: List<GuidePoint>,
+    val midpoints: Map<Int, GuidePoint> = emptyMap(),
 ) {
     /** コマンド表示・完了メッセージに使う名前です。 */
     val label: String get() = displayName ?: id
@@ -96,8 +97,25 @@ object GuideRouteCodec {
                 message,
             )
         }
+        // キー 3.5 は3番と4番の中継点の間の通過点を表します。
+        val midpoints = linkedMapOf<Int, GuidePoint>()
+        section.getConfigurationSection("midpoints")?.let { mid ->
+            for (key in mid.getKeys(false)) {
+                val index = key.toIntOrNull()
+                val node = mid.getConfigurationSection(key)
+                val x = node?.get("x") as? Number
+                val y = node?.get("y") as? Number
+                val z = node?.get("z") as? Number
+                if (index == null || index >= points.size || x == null || y == null || z == null ||
+                    !x.toDouble().isFinite() || !y.toDouble().isFinite() || !z.toDouble().isFinite()) {
+                    errors += "routes.$id.midpoints.$key は隣接する中継点間の有限座標で指定してください"
+                } else {
+                    midpoints[index] = GuidePoint(x.toDouble(), y.toDouble(), z.toDouble(), 0f, 0f)
+                }
+            }
+        }
         if (errors.isNotEmpty()) return ParseResult.Failure(errors)
-        return ParseResult.Success(mapOf(id to GuideRoute(id, world!!, displayName, points)))
+        return ParseResult.Success(mapOf(id to GuideRoute(id, world!!, displayName, points, midpoints)))
     }
 
     /** 中継点を YAML セクションへ書き戻します。既存の message は保持されます。 */
