@@ -206,6 +206,8 @@ internal class GuideAllayRenderer(
         val textJson = GsonComponentSerializer.gson().serialize(text)
         val textHandle = WrappedChatComponent.fromJson(textJson).handle
         val values = listOf(
+            // 毎 tick の位置更新を1 tickで補間します。
+            WrappedDataValue(ID_POS_ROT_INTERPOLATION_DURATION, intSerializer(), 1),
             // index 15: billboard 制約。3 は常時 viewer 正面の CENTER です。
             WrappedDataValue(ID_BILLBOARD, byteSerializer(), BILLBOARD_CENTER),
             // index 23: 表示テキスト（Component）。
@@ -316,6 +318,7 @@ internal class GuideAllayRenderer(
         const val ID_NAME_VISIBLE: Int = 3
 
         // Display/TextDisplay の metadata index です（26.2 の defineSynchedData 順）。
+        const val ID_POS_ROT_INTERPOLATION_DURATION: Int = 10
         const val ID_BILLBOARD: Int = 15
         const val ID_TEXT: Int = 23
         const val ID_LINE_WIDTH: Int = 24

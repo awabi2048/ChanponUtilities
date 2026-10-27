@@ -3,12 +3,14 @@ package me.awabi2048.chanponutilities.guide
 import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys as Keys
 import me.awabi2048.chanponutilities.util.ChanponI18n
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import org.bukkit.Particle
 import org.bukkit.Sound
 import org.bukkit.World
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.BoundingBox
 import java.util.UUID
+import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -82,6 +84,9 @@ class GuideSessionService(
         var displayIndex: Int = 0,
         var glowing: Boolean = false,
         var movingThisTick: Boolean = false,
+        var particleTicks: Int = 0,
+        var speedPerTick: Double = 0.0,
+        var movementNoisePhase: Double = 0.0,
     )
 
     fun start() {
@@ -211,13 +216,8 @@ class GuideSessionService(
         val player = session.player
         val point = session.route.points[session.nextIndex]
         point.message.forEach { player.sendMessage(ChanponI18n.colorize(it)) }
-        player.sendMessage(
-            ChanponI18n.text(
-                player, Keys.CHANPON_UTILITIES_GUIDE_WAYPOINT_COMPLETED,
-                "index" to session.nextIndex + 1,
-                "total" to session.route.points.size,
-            )
-        )
+        // 中継点のクリックを共通の効果音で伝え、進捗の定型文は表示しません。
+        player.playSound(player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 1.4f)
         session.nextIndex++
         session.offCourseTicks = 0
         if (session.nextIndex >= session.route.points.size) {
@@ -272,6 +272,37 @@ class GuideSessionService(
             Phase.FOLLOWING -> tickFollowing(session)
         }
         checkOffCourse(session)
+        showParticles(session)
+    }
+
+    /** 演出は案内対象のプレイヤーにだけ送信します。 */
+    private fun showParticles(session: GuideSession) {
+        val player = session.player
+        val phase = session.particleTicks * Math.PI / 20.0
+        for (i in 0..1) {
+            val angle = phase + i * Math.PI
+            player.spawnParticle(Particle.END_ROD, session.x + cos(angle) * 0.55,
+                session.y + 0.4 + sin(phase * 0.5) * 0.1, session.z + sin(angle) * 0.55,
+                1, 0.0, 0.0, 0.0, 0.0)
+        }
+        if (++session.particleTicks % 100 != 0) return
+        val from = player.location.add(0.0, 1.0, 0.0)
+        val dx = session.x - from.x
+        val dy = session.y + 0.3 - from.y
+        val dz = session.z - from.z
+        val length = sqrt(dx * dx + dy * dy + dz * dz)
+        if (length <= 1.0e-6) return
+        val count = (length * 2.0).toInt().coerceIn(1, 128)
+        val random = java.util.concurrent.ThreadLocalRandom.current()
+        for (i in 0..count) {
+            val t = i.toDouble() / count
+            // count=0 のパーティクルは指定ベクトルを速度として扱います。
+            player.spawnParticle(Particle.END_ROD,
+                from.x + dx * t + random.nextDouble(-0.1, 0.1),
+                from.y + dy * t + random.nextDouble(-0.1, 0.1),
+                from.z + dz * t + random.nextDouble(-0.1, 0.1),
+                0, dx / length, dy / length, dz / length, 0.05)
+        }
     }
 
     /**
@@ -280,7 +311,18 @@ class GuideSessionService(
      */
     private fun bobOffset(session: GuideSession): Double {
         session.bobPhase += if (session.movingThisTick) BOB_RADIANS_MOVING else BOB_RADIANS_IDLE
-        return sin(session.bobPhase) * BOB_AMPLITUDE
+        return sin(session.bobPhase) * BOB_AMPLITUDE * (1.0 + 0.15 * sin(session.movementNoisePhase * 0.7))
+    }
+
+    /** 速度はゆっくり変動させ、到着前に減速して急発進と急停止を避けます。 */
+    private fun flightStep(session: GuideSession, flight: GuideCourseMath.FlightPath, speed: Double): Double {
+        session.movementNoisePhase += 0.035
+        val desired = speed / TICKS_PER_SECOND * (1.0 + 0.15 * sin(session.movementNoisePhase))
+        val remaining = (flight.totalLength - flight.traveled).coerceAtLeast(0.0)
+        val braking = kotlin.math.sqrt(2.0 * 0.02 * remaining)
+        val target = minOf(desired, braking)
+        session.speedPerTick += (target - session.speedPerTick).coerceIn(-0.02, 0.02)
+        return session.speedPerTick.coerceAtLeast(0.001)
     }
 
     /**
@@ -306,7 +348,7 @@ class GuideSessionService(
         val prevX = session.x
         val prevY = session.y
         val prevZ = session.z
-        val pos = flight.advance(speed / TICKS_PER_SECOND)
+        val pos = flight.advance(flightStep(session, flight, speed))
         session.x = pos.first
         session.y = pos.second
         session.z = pos.third
@@ -326,6 +368,7 @@ class GuideSessionService(
             session.y = target.y
             session.z = target.z
             session.flight = null
+            session.speedPerTick = 0.0
             session.phase = Phase.WAITING
             renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, target.yaw, target.pitch)
         }
@@ -355,7 +398,7 @@ class GuideSessionService(
         val prevX = session.x
         val prevY = session.y
         val prevZ = session.z
-        val pos = flight.advance(settings.followFlightSpeed / TICKS_PER_SECOND)
+        val pos = flight.advance(flightStep(session, flight, settings.followFlightSpeed))
         session.x = pos.first
         session.y = pos.second
         session.z = pos.third
@@ -439,21 +482,22 @@ class GuideSessionService(
     private fun refreshAnchorIfNeeded(session: GuideSession) {
         val loc = session.player.location
         if (!loc.x.isNaN() &&
-            GuideCourseMath.distanceSq(loc.x, loc.y, loc.z, session.anchorPlayerX, session.anchorPlayerY, session.anchorPlayerZ) <= ANCHOR_REFRESH_MOVE_SQ &&
+            GuideCourseMath.distanceSq(loc.x, 0.0, loc.z, session.anchorPlayerX, 0.0, session.anchorPlayerZ) <= ANCHOR_REFRESH_MOVE_SQ &&
             session.anchorValid
         ) return
         session.anchorPlayerX = loc.x
-        session.anchorPlayerY = loc.y
+        if (session.anchorPlayerY.isNaN()) session.anchorPlayerY = loc.y
         session.anchorPlayerZ = loc.z
         session.anchorValid = false
-        val prev = session.route.points[session.nextIndex - 1]
         val next = session.route.points[session.nextIndex]
-        val candidates = GuideCourseMath.boundaryAnchorCandidates(
-            loc.x, loc.y, loc.z,
-            prev.x, prev.y, prev.z,
-            next.x, next.y, next.z,
-            settings.courseRadius,
-        )
+        // プレイヤーから経路側へ2ブロック寄った位置を基準に、周囲の安全な候補を探します。
+        val dx = next.x - loc.x
+        val dz = next.z - loc.z
+        val angle = kotlin.math.atan2(dz, dx)
+        val candidates = listOf(0.0, 25.0, -25.0, 50.0, -50.0, 90.0, -90.0).map { offset ->
+            val direction = angle + Math.toRadians(offset)
+            Triple(loc.x + 2.0 * cos(direction), session.anchorPlayerY + 1.0, loc.z + 2.0 * sin(direction))
+        }
         for ((x, y, z) in candidates) {
             if (canOccupyAllay(session.player.world, x, y, z)) {
                 session.anchorX = x
@@ -496,6 +540,7 @@ class GuideSessionService(
         if (session.phase == Phase.WAITING && session.offCourseTicks >= graceTicks) {
             session.phase = Phase.FOLLOWING
             session.anchorValid = false
+            session.anchorPlayerY = Double.NaN
             session.followTicks = 0
             session.displayIndex = 0
             session.flight = null
