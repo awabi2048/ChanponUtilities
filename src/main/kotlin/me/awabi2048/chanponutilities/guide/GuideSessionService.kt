@@ -36,6 +36,10 @@ class GuideSessionService(
     /** ガイドモジュールの設定値です。config reload はライフサイクル再起動を伴うため生成時の snapshot で構いません。 */
     data class GuideSettings(
         val clickDistance: Double,
+        val waypointRadius: Double,
+        val waypointVerticalRadius: Double,
+        val waypointDwellSeconds: Double,
+        val messageWaitSecondsPerLine: Double,
         val courseRadius: Double,
         val offCourseGraceSeconds: Double,
         val offCourseChatIntervalSeconds: Double,
@@ -89,6 +93,8 @@ class GuideSessionService(
         var speedPerTick: Double = 0.0,
         var movementNoisePhase: Double = 0.0,
         var pathRetryTicks: Int = 0,
+        var waypointProgress: GuideWaypointProgress? = null,
+        var ended: Boolean = false,
     )
 
     fun start() {
@@ -110,7 +116,7 @@ class GuideSessionService(
     data class SessionStatus(val route: GuideRoute, val nextIndex: Int)
 
     fun statusOf(player: Player): SessionStatus? =
-        sessions[player.uniqueId]?.let { SessionStatus(it.route, it.nextIndex) }
+        sessions[player.uniqueId]?.takeUnless { it.ended }?.let { SessionStatus(it.route, it.nextIndex) }
 
     /**
      * ガイドを開始します。すでにガイド中なら現在のセッションを破棄して
@@ -189,11 +195,13 @@ class GuideSessionService(
      */
     private fun handleInteract(player: Player, entityId: Int) {
         val session = sessions[player.uniqueId] ?: return
-        if (session.entityId != entityId) return
+        if (session.ended || session.entityId != entityId) return
         if (player.world.name != session.route.worldName) return
 
         when (session.phase) {
             Phase.WAITING -> {
+                // 2点目以降はクリックを受け付けず、滞在時間によって進行します。
+                if (session.nextIndex != 0) return
                 val maxDist = settings.clickDistance
                 if (GuideCourseMath.distanceSq(
                         player.location.x, player.location.y, player.location.z,
@@ -214,16 +222,25 @@ class GuideSessionService(
         }
     }
 
-    private fun completeWaypoint(session: GuideSession) {
+    private fun sendWaypointMessage(session: GuideSession) {
         val player = session.player
-        val point = session.route.points[session.nextIndex]
-        point.message.forEach { player.sendMessage(ChanponI18n.colorize(it)) }
-        // 中継点のクリックを共通の効果音で伝え、進捗の定型文は表示しません。
+        session.route.points[session.nextIndex].message.forEach { player.sendMessage(ChanponI18n.colorize(it)) }
         player.playSound(player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 1.4f)
+    }
+
+    /** 最初のクリックは従来通り、メッセージ送信後に案内を開始します。 */
+    private fun completeWaypoint(session: GuideSession) {
+        sendWaypointMessage(session)
+        advanceWaypoint(session)
+    }
+
+    private fun advanceWaypoint(session: GuideSession) {
+        val player = session.player
+        session.waypointProgress = null
         session.nextIndex++
         session.offCourseTicks = 0
         if (session.nextIndex >= session.route.points.size) {
-            sessions.remove(player.uniqueId)
+            session.ended = true
             destroyEntities(session)
             player.sendMessage(
                 ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_COMPLETED, "route" to session.route.label)
@@ -270,11 +287,12 @@ class GuideSessionService(
         val iterator = sessions.values.iterator()
         while (iterator.hasNext()) {
             val session = iterator.next()
-            if (!session.player.isOnline) {
+            if (session.ended || !session.player.isOnline) {
                 iterator.remove()
                 continue
             }
             tick(session)
+            if (session.ended) iterator.remove()
         }
     }
 
@@ -288,6 +306,7 @@ class GuideSessionService(
             Phase.FLYING, Phase.RETURNING -> tickFlight(session)
             Phase.FOLLOWING -> tickFollowing(session)
         }
+        if (session.ended) return
         checkOffCourse(session)
         showParticles(session)
         if (settings.debug && session.particleTicks % 10 == 0) showDebug(session)
@@ -378,6 +397,20 @@ class GuideSessionService(
         session.x = point.x
         session.y = point.y
         session.z = point.z
+        if (session.nextIndex == 0) return
+        val progress = session.waypointProgress ?: GuideWaypointProgress(
+            kotlin.math.ceil(settings.waypointDwellSeconds * TICKS_PER_SECOND).toLong(),
+            kotlin.math.ceil(settings.messageWaitSecondsPerLine * point.message.size * TICKS_PER_SECOND).toLong(),
+        ).also { session.waypointProgress = it }
+        val loc = session.player.location
+        val inRange = GuideWaypointProgress.contains(loc.x, loc.y, loc.z, point.x, point.y, point.z,
+            settings.waypointRadius, settings.waypointVerticalRadius)
+        when (progress.tick(inRange)) {
+            GuideWaypointProgress.Event.NONE -> Unit
+            GuideWaypointProgress.Event.MESSAGE -> sendWaypointMessage(session)
+            GuideWaypointProgress.Event.MESSAGE_AND_ADVANCE -> { sendWaypointMessage(session); advanceWaypoint(session) }
+            GuideWaypointProgress.Event.ADVANCE -> advanceWaypoint(session)
+        }
     }
 
     /**
@@ -578,7 +611,7 @@ class GuideSessionService(
      * 1点目の完了前は「現在区間」が未定義のため、逸脱判定を行いません。
      */
     private fun checkOffCourse(session: GuideSession) {
-        if (session.nextIndex == 0 || session.nextIndex >= session.route.points.size) return
+        if (session.nextIndex == 0 || session.nextIndex >= session.route.points.size || session.waypointProgress?.messageSent == true) return
         val player = session.player
         val prev = session.route.points[session.nextIndex - 1]
         val next = session.route.points[session.nextIndex]
@@ -600,6 +633,8 @@ class GuideSessionService(
         val graceTicks = (settings.offCourseGraceSeconds * TICKS_PER_SECOND).toInt()
         if (session.phase == Phase.WAITING && session.offCourseTicks >= graceTicks) {
             session.phase = Phase.FOLLOWING
+            // 追従開始時には滞在が中断されるため、帰還後は計測し直します。
+            session.waypointProgress = null
             session.anchorValid = false
             session.anchorPlayerY = Double.NaN
             session.followTicks = 0

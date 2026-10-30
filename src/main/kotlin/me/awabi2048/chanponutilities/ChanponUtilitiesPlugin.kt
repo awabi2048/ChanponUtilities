@@ -219,6 +219,13 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                             config.set("features.guide_array.path_curve_deviation", null)
                             if (!config.contains("features.guide_array.debug")) config.set("features.guide_array.debug", false)
                         },
+                        11 to ConfigMigration { config ->
+                            // 自動進行の時間と範囲は既存設定を上書きせずに追加します。
+                            if (!config.contains("features.guide_array.waypoint_radius")) config.set("features.guide_array.waypoint_radius", 3.0)
+                            if (!config.contains("features.guide_array.waypoint_vertical_radius")) config.set("features.guide_array.waypoint_vertical_radius", 3.0)
+                            if (!config.contains("features.guide_array.waypoint_dwell_seconds")) config.set("features.guide_array.waypoint_dwell_seconds", 2.0)
+                            if (!config.contains("features.guide_array.message_wait_seconds_per_line")) config.set("features.guide_array.message_wait_seconds_per_line", 5.0)
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -293,6 +300,10 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                 guideRouteStore = store
                 val settings = GuideSessionService.GuideSettings(
                     clickDistance = config.getDouble("features.guide_array.click_distance", 4.5),
+                    waypointRadius = config.getDouble("features.guide_array.waypoint_radius", 3.0),
+                    waypointVerticalRadius = config.getDouble("features.guide_array.waypoint_vertical_radius", 3.0),
+                    waypointDwellSeconds = config.getDouble("features.guide_array.waypoint_dwell_seconds", 2.0),
+                    messageWaitSecondsPerLine = config.getDouble("features.guide_array.message_wait_seconds_per_line", 5.0),
                     courseRadius = config.getDouble("features.guide_array.course_radius", 4.0),
                     offCourseGraceSeconds = config.getDouble("features.guide_array.off_course_grace_seconds", 10.0),
                     offCourseChatIntervalSeconds = config.getDouble("features.guide_array.off_course_chat_interval_seconds", 60.0),
@@ -421,6 +432,13 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             "$COMMAND_SAFEGUARD_BLACKLIST_PATH must not contain duplicates"
         }
         // ガイドアレイの動作パラメータは正の有限数であることを要求します。
+        // 有限値を要求し、NaN や無限大によるタイマーの破綻を防ぎます。
+        for ((key, minimum) in listOf("waypoint_radius" to 0.0, "waypoint_vertical_radius" to 0.0, "waypoint_dwell_seconds" to 2.0, "message_wait_seconds_per_line" to 0.0)) {
+            val value = config.get("features.guide_array.$key") as? Number
+            require(value != null && value.toDouble().isFinite() && value.toDouble() >= minimum && (key != "waypoint_radius" || value.toDouble() > 0.0)) {
+                "features.guide_array.$key は有効な数値で指定してください"
+            }
+        }
         require(config.get("features.guide_array.click_distance") is Number) {
             "features.guide_array.click_distance must be a number"
         }
@@ -516,7 +534,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 11
+        const val CONFIG_VERSION = 12
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }

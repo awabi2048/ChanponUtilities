@@ -29,6 +29,10 @@ features:
     enabled: true
     debug: false
     click_distance: 4.5
+    waypoint_radius: 3.0
+    waypoint_vertical_radius: 3.0
+    waypoint_dwell_seconds: 2.0
+    message_wait_seconds_per_line: 5.0
     course_radius: 4.0
     off_course_grace_seconds: 10.0
     off_course_chat_interval_seconds: 60.0
@@ -62,4 +66,4 @@ command_safeguard:
     - "/kill @e[]"
     - "/kill @e"
 
-config_version: 11
+config_version: 12
