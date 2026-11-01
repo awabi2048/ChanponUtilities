@@ -94,6 +94,8 @@ class GuideSessionService(
         var movementNoisePhase: Double = 0.0,
         var pathRetryTicks: Int = 0,
         var waypointProgress: GuideWaypointProgress? = null,
+        var recoveryMotion: GuideRecoveryMotion = GuideRecoveryMotion(),
+        var guidingBack: Boolean = false,
         var ended: Boolean = false,
     )
 
@@ -225,7 +227,10 @@ class GuideSessionService(
     private fun sendWaypointMessage(session: GuideSession) {
         val player = session.player
         session.route.points[session.nextIndex].message.forEach { player.sendMessage(ChanponI18n.colorize(it)) }
-        player.playSound(player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 1.4f)
+        // 中継完了時の演出は案内対象者にのみ表示します。
+        player.spawnParticle(Particle.TOTEM_OF_UNDYING, session.x, session.y, session.z, 20, 2.0, 2.0, 2.0, 0.2)
+        player.playSound(player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 0.98f)
+        player.playSound(player.location, Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.5f)
     }
 
     /** 最初のクリックは従来通り、メッセージ送信後に案内を開始します。 */
@@ -344,22 +349,36 @@ class GuideSessionService(
         val phase = session.particleTicks * Math.PI / 20.0
         for (i in 0..1) {
             val angle = phase + i * Math.PI
-            player.spawnParticle(Particle.END_ROD, session.x + cos(angle) * 0.55,
-                session.y + 0.4 + sin(phase * 0.5) * 0.1, session.z + sin(angle) * 0.55,
+            // 2つの軌道に異なる種類を割り当て、両者を均等に表示します。
+            val particle = if (i == 0) Particle.ENCHANTED_HIT else Particle.END_ROD
+            player.spawnParticle(particle, session.x + cos(angle) * 2.0,
+                session.y + 0.4 + sin(phase * 0.5) * 0.1, session.z + sin(angle) * 2.0,
                 1, 0.0, 0.0, 0.0, 0.0)
         }
         if (++session.particleTicks % 100 != 0) return
         val from = player.location.add(0.0, 1.0, 0.0)
-        val dx = session.x - from.x
-        val dy = session.y + 0.3 - from.y
-        val dz = session.z - from.z
+        val allay = org.bukkit.Location(player.world, session.x, session.y + 0.3, session.z)
+        val point = session.route.points[session.nextIndex]
+        val target = org.bukkit.Location(player.world, point.x, point.y + 0.3, point.z)
+        if (session.phase == Phase.FOLLOWING) {
+            showParticleLine(player, from, target)
+        } else {
+            showParticleLine(player, from, allay)
+            showParticleLine(player, allay, target)
+        }
+    }
+
+    /** 誘導線上の位置にばらつきと目的地方向の速度を与えます。 */
+    private fun showParticleLine(player: Player, from: org.bukkit.Location, to: org.bukkit.Location) {
+        val dx = to.x - from.x
+        val dy = to.y - from.y
+        val dz = to.z - from.z
         val length = sqrt(dx * dx + dy * dy + dz * dz)
         if (length <= 1.0e-6) return
         val count = (length * 2.0).toInt().coerceIn(1, 128)
         val random = java.util.concurrent.ThreadLocalRandom.current()
         for (i in 0..count) {
             val t = i.toDouble() / count
-            // count=0 のパーティクルは指定ベクトルを速度として扱います。
             player.spawnParticle(Particle.END_ROD,
                 from.x + dx * t + random.nextDouble(-0.1, 0.1),
                 from.y + dy * t + random.nextDouble(-0.1, 0.1),
@@ -393,7 +412,15 @@ class GuideSessionService(
      */
     private fun tickWaiting(session: GuideSession) {
         val point = session.route.points[session.nextIndex]
-        renderer.moveTo(session.player, session.entityId, point.x, point.y + bobOffset(session), point.z, point.yaw, point.pitch)
+        val viewer = session.player.location
+        // 中継点の近くにいるときはプレイヤーの目元を見て、離れたら設定方向に戻します。
+        val nearby = GuideCourseMath.distanceSq(viewer.x, viewer.y, viewer.z, point.x, point.y, point.z) <=
+            settings.waypointRadius * settings.waypointRadius
+        val (yaw, pitch) = if (nearby) GuideCourseMath.lookAngles(
+            point.x, point.y + ALLAY_HEIGHT / 2.0, point.z,
+            viewer.x, session.player.eyeLocation.y, viewer.z,
+        ) else point.yaw to point.pitch
+        renderer.moveTo(session.player, session.entityId, point.x, point.y + bobOffset(session), point.z, yaw, pitch)
         session.x = point.x
         session.y = point.y
         session.z = point.z
@@ -469,7 +496,33 @@ class GuideSessionService(
      */
     private fun tickFollowing(session: GuideSession) {
         session.followTicks++
-        refreshAnchorIfNeeded(session)
+        val loc = session.player.location
+        val previous = session.route.points[session.nextIndex - 1]
+        val target = session.route.points[session.nextIndex]
+        val routePoints = session.coursePath?.points ?: listOf(
+            Triple(previous.x, previous.y, previous.z), Triple(target.x, target.y, target.z))
+        val distance = routePoints.zipWithNext().minOf { (a, b) ->
+            GuideCourseMath.distanceToSegment(loc.x, loc.y, loc.z, a.first, a.second, a.third, b.first, b.second, b.third)
+        }
+        val guidingBack = session.recoveryMotion.update(loc.x, loc.y, loc.z, distance)
+        if (guidingBack != session.guidingBack) {
+            session.guidingBack = guidingBack
+            session.anchorValid = false
+            session.flight = null
+            session.speedPerTick = 0.0
+        }
+        if (guidingBack) {
+            // 復帰方向に歩いている間は目的地へ進み、停止後も5秒間継続します。
+            if (session.flight == null && (session.followTicks % 100 == 1 || session.pathRetryTicks == 0)) {
+                session.flight = planFlightTo(session, target.x, target.y, target.z)
+                session.pathRetryTicks = 1
+            } else if (session.flight == null) {
+                session.pathRetryTicks++
+            }
+        } else {
+            session.pathRetryTicks = 0
+            refreshAnchorIfNeeded(session)
+        }
 
         var tx = session.x
         var ty = session.y
@@ -555,7 +608,7 @@ class GuideSessionService(
         session.player.playSound(
             session.player.location.set(session.x, session.y, session.z),
             Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM,
-            0.8f, 1.4f,
+            0.8f, 0.98f,
         )
     }
 
@@ -633,6 +686,9 @@ class GuideSessionService(
         val graceTicks = (settings.offCourseGraceSeconds * TICKS_PER_SECOND).toInt()
         if (session.phase == Phase.WAITING && session.offCourseTicks >= graceTicks) {
             session.phase = Phase.FOLLOWING
+            session.recoveryMotion = GuideRecoveryMotion()
+            session.guidingBack = false
+            session.pathRetryTicks = 0
             // 追従開始時には滞在が中断されるため、帰還後は計測し直します。
             session.waypointProgress = null
             session.anchorValid = false
