@@ -742,9 +742,9 @@ class GuideSessionService(
         const val BOB_RADIANS_IDLE = Math.PI / 30.0
         const val BOB_RADIANS_MOVING = Math.PI / 15.0
         const val BOB_AMPLITUDE = 0.15
-        /** Allay の当たり判定サイズです（NMS の ALLAY 寸法 0.35 x 0.6）。 */
-        const val ALLAY_HALF_WIDTH = 0.175
-        const val ALLAY_HEIGHT = 0.6
+        /** 見た目のスケールに合わせて占有判定も拡大します。 */
+        const val ALLAY_HALF_WIDTH = GuideAllayDimensions.HALF_WIDTH
+        const val ALLAY_HEIGHT = GuideAllayDimensions.HEIGHT
         /** 追従アンカーの再計算を行うプレイヤー移動量の閾値（二乗）です。 */
         const val ANCHOR_REFRESH_MOVE_SQ = 0.25 * 0.25
         /** 移動方向へ向きを変える最小移動量（二乗）です。 */

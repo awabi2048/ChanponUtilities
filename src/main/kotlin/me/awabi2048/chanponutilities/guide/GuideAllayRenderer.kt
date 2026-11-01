@@ -333,7 +333,7 @@ internal class GuideAllayRenderer(
         const val STYLE_SHADOW_OR_DEFAULT_BG: Byte = 0x05
 
         /** ガイドアレイの見た目スケールです。 */
-        const val ALLAY_SCALE: Double = 1.5
+        const val ALLAY_SCALE: Double = GuideAllayDimensions.SCALE
 
         /** PosRot が一度に表せる相対移動幅（±8 ブロックの手前で安全側に切ります）。 */
         const val RELATIVE_MOVE_LIMIT: Double = 7.5
