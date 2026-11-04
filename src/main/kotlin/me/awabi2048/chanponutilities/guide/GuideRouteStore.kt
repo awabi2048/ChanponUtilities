@@ -20,12 +20,21 @@ class GuideRouteStore(
 ) {
     private val filePath: Path = plugin.dataFolder.toPath().resolve(FILE_NAME)
 
+    /** ルートと自動開始用索引を同時に切り替え、読込途中の不整合を防ぎます。 */
+    private data class Snapshot(
+        val routes: Map<String, GuideRoute>,
+        val autoStartByWorld: Map<String, List<GuideRoute>>,
+    )
+
     @Volatile
-    private var routes: Map<String, GuideRoute> = emptyMap()
+    private var snapshot = Snapshot(emptyMap(), emptyMap())
 
-    fun all(): List<GuideRoute> = routes.values.toList()
+    fun all(): List<GuideRoute> = snapshot.routes.values.toList()
 
-    fun find(id: String): GuideRoute? = routes[id]
+    fun find(id: String): GuideRoute? = snapshot.routes[id]
+
+    /** 設定順を維持した索引を返し、判定ごとの全ルートのコピーを避けます。 */
+    internal fun autoStartRoutes(world: String): List<GuideRoute> = snapshot.autoStartByWorld[world] ?: emptyList()
 
     sealed interface LoadResult {
         data class Loaded(val routeCount: Int) : LoadResult
@@ -49,7 +58,8 @@ class GuideRouteStore(
     private fun adopt(yaml: YamlConfiguration): LoadResult {
         return when (val parsed = GuideRouteCodec.parse(yaml.getConfigurationSection("routes"))) {
             is GuideRouteCodec.ParseResult.Success -> {
-                routes = parsed.routes
+                val byWorld = parsed.routes.values.filter { it.autoStart != null }.groupBy { it.autoStart!!.worldName }
+                snapshot = Snapshot(parsed.routes, byWorld)
                 LoadResult.Loaded(parsed.routes.size)
             }
             is GuideRouteCodec.ParseResult.Failure -> LoadResult.Invalid(parsed.errors)

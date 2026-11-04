@@ -47,6 +47,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     private var commandSafeguardService: CommandSafeguardService? = null
     private var guideSessionService: GuideSessionService? = null
     private var guideRouteStore: GuideRouteStore? = null
+    private var guideListener: GuideListener? = null
     private var moduleState: ChanponModuleState = ChanponModuleState.defaults()
 
     override fun onEnable() {
@@ -323,7 +324,10 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                 val service = GuideSessionService(this, settings)
                 guideSessionService = service
                 service.start()
-                server.pluginManager.registerEvents(GuideListener(service, store, this), this)
+                val listener = GuideListener(service, store, this)
+                guideListener = listener
+                server.pluginManager.registerEvents(listener, this)
+                listener.start()
                 installCommand("guide", GuideCommand(store, service))
             } else {
                 logger.warning("ProtocolLib が見つからないため guide_array は動作しません。")
@@ -356,6 +360,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         myWorldManagerIntegration = null
         linkStore?.let { store -> runCatching(store::save).onFailure { failure -> logger.log(Level.WARNING, "Failed to save lectern links", failure) } }
         linkStore = null
+        guideListener?.shutdown()
+        guideListener = null
         guideSessionService?.shutdown()
         guideSessionService = null
         guideRouteStore = null

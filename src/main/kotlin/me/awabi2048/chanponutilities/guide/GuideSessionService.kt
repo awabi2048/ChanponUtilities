@@ -119,6 +119,9 @@ class GuideSessionService(
     /** 進行中セッションの表示用スナップショットです。 */
     data class SessionStatus(val route: GuideRoute, val nextIndex: Int)
 
+    /** 頻繁な自動開始判定では表示用スナップショットを作らず状態だけを確認します。 */
+    fun isGuiding(player: Player): Boolean = sessions[player.uniqueId]?.ended == false
+
     fun statusOf(player: Player): SessionStatus? =
         sessions[player.uniqueId]?.takeUnless { it.ended }?.let { SessionStatus(it.route, it.nextIndex) }
 
