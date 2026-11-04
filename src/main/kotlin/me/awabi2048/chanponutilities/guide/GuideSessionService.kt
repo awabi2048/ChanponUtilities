@@ -99,6 +99,8 @@ class GuideSessionService(
         var ended: Boolean = false,
     )
 
+    fun isRunning(): Boolean = tickTaskId != -1
+
     fun start() {
         renderer.register()
         tickTaskId = plugin.server.scheduler.scheduleSyncRepeatingTask(plugin, ::tickAll, 1L, 1L)

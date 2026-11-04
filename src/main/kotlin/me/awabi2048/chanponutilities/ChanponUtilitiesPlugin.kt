@@ -226,6 +226,14 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                             if (!config.contains("features.guide_array.waypoint_dwell_seconds")) config.set("features.guide_array.waypoint_dwell_seconds", 2.0)
                             if (!config.contains("features.guide_array.message_wait_seconds_per_line")) config.set("features.guide_array.message_wait_seconds_per_line", 5.0)
                         },
+                        12 to ConfigMigration { config ->
+                            // 運用中の独自値も維持しつつ、接近範囲を各軸で2倍に拡大します。
+                            for (key in listOf("waypoint_radius", "waypoint_vertical_radius")) {
+                                val path = "features.guide_array.$key"
+                                val value = config.get(path) as? Number
+                                if (value != null) config.set(path, value.toDouble() * 2.0)
+                            }
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -300,8 +308,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                 guideRouteStore = store
                 val settings = GuideSessionService.GuideSettings(
                     clickDistance = config.getDouble("features.guide_array.click_distance", 4.5),
-                    waypointRadius = config.getDouble("features.guide_array.waypoint_radius", 3.0),
-                    waypointVerticalRadius = config.getDouble("features.guide_array.waypoint_vertical_radius", 3.0),
+                    waypointRadius = config.getDouble("features.guide_array.waypoint_radius", 6.0),
+                    waypointVerticalRadius = config.getDouble("features.guide_array.waypoint_vertical_radius", 6.0),
                     waypointDwellSeconds = config.getDouble("features.guide_array.waypoint_dwell_seconds", 2.0),
                     messageWaitSecondsPerLine = config.getDouble("features.guide_array.message_wait_seconds_per_line", 5.0),
                     courseRadius = config.getDouble("features.guide_array.course_radius", 4.0),
@@ -315,7 +323,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                 val service = GuideSessionService(this, settings)
                 guideSessionService = service
                 service.start()
-                server.pluginManager.registerEvents(GuideListener(service), this)
+                server.pluginManager.registerEvents(GuideListener(service, store, this), this)
                 installCommand("guide", GuideCommand(store, service))
             } else {
                 logger.warning("ProtocolLib が見つからないため guide_array は動作しません。")
@@ -534,7 +542,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 12
+        const val CONFIG_VERSION = 13
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }
