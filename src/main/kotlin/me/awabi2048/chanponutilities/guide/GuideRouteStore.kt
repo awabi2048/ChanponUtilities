@@ -20,12 +20,21 @@ class GuideRouteStore(
 ) {
     private val filePath: Path = plugin.dataFolder.toPath().resolve(FILE_NAME)
 
+    /** ルートと自動開始用索引を同時に切り替え、読込途中の不整合を防ぎます。 */
+    private data class Snapshot(
+        val routes: Map<String, GuideRoute>,
+        val autoStartByWorld: Map<String, List<GuideRoute>>,
+    )
+
     @Volatile
-    private var routes: Map<String, GuideRoute> = emptyMap()
+    private var snapshot = Snapshot(emptyMap(), emptyMap())
 
-    fun all(): List<GuideRoute> = routes.values.toList()
+    fun all(): List<GuideRoute> = snapshot.routes.values.toList()
 
-    fun find(id: String): GuideRoute? = routes[id]
+    fun find(id: String): GuideRoute? = snapshot.routes[id]
+
+    /** 設定順を維持した索引を返し、判定ごとの全ルートのコピーを避けます。 */
+    internal fun autoStartRoutes(world: String): List<GuideRoute> = snapshot.autoStartByWorld[world] ?: emptyList()
 
     sealed interface LoadResult {
         data class Loaded(val routeCount: Int) : LoadResult
@@ -49,7 +58,8 @@ class GuideRouteStore(
     private fun adopt(yaml: YamlConfiguration): LoadResult {
         return when (val parsed = GuideRouteCodec.parse(yaml.getConfigurationSection("routes"))) {
             is GuideRouteCodec.ParseResult.Success -> {
-                routes = parsed.routes
+                val byWorld = parsed.routes.values.filter { it.autoStart != null }.groupBy { it.autoStart!!.worldName }
+                snapshot = Snapshot(parsed.routes, byWorld)
                 LoadResult.Loaded(parsed.routes.size)
             }
             is GuideRouteCodec.ParseResult.Failure -> LoadResult.Invalid(parsed.errors)
@@ -121,6 +131,23 @@ class GuideRouteStore(
             ?: return SetPointResult.Failed("re-validation after save failed")
         val route = find(routeId) ?: return SetPointResult.Failed("route missing after save")
         return SetPointResult.Saved(route, index, appended = index > size)
+    }
+
+    /** 中継点間の通過点を保存します。中継点の番号は変えません。 */
+    @Synchronized
+    fun setMidpoint(routeId: String, index: Int, worldName: String, x: Double, y: Double, z: Double): Boolean {
+        val route = find(routeId) ?: return false
+        if (route.worldName != worldName || index < 1 || index >= route.points.size) return false
+        val yaml = YamlConfiguration()
+        yaml.load(filePath.toFile())
+        val routeSection = yaml.getConfigurationSection("routes")?.getConfigurationSection(routeId) ?: return false
+        val midpoints = routeSection.getConfigurationSection("midpoints") ?: routeSection.createSection("midpoints")
+        // 小数点を含む識別子はパス区切りと混同しないよう、区間番号を階層として保存します。
+        val node = midpoints.getConfigurationSection(index.toString()) ?: midpoints.createSection(index.toString())
+        node.set("x", x); node.set("y", y); node.set("z", z)
+        if (GuideRouteCodec.parse(yaml.getConfigurationSection("routes")) is GuideRouteCodec.ParseResult.Failure) return false
+        saveYaml(yaml)
+        return adopt(yaml) is LoadResult.Loaded
     }
 
     private fun pointToMap(point: GuidePoint): Map<String, Any> = linkedMapOf(

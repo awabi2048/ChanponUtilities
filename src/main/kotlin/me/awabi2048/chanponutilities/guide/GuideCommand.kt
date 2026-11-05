@@ -121,7 +121,18 @@ class GuideCommand(
                     return
                 }
                 val routeId = args.getOrNull(1)
-                val index = args.getOrNull(2)?.toIntOrNull()
+                val indexText = args.getOrNull(2)
+                val midpoint = Regex("([1-9][0-9]*)\\.5").matchEntire(indexText ?: "")?.groupValues?.get(1)?.toIntOrNull()
+                if (routeId != null && midpoint != null) {
+                    val loc = player.location
+                    if (routeStore.setMidpoint(routeId, midpoint, loc.world.name, loc.x, loc.y, loc.z)) {
+                        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ADMIN_SETPOINT_SAVED, "route" to routeId, "index" to "$midpoint.5"))
+                    } else {
+                        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ADMIN_INVALID_INDEX, "index" to "$midpoint.5"))
+                    }
+                    return
+                }
+                val index = indexText?.toIntOrNull()
                 if (routeId == null || index == null) {
                     sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ADMIN_USAGE))
                     return

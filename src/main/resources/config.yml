@@ -27,14 +27,18 @@ features:
     enabled: true
   guide_array:
     enabled: true
+    debug: false
     click_distance: 4.5
+    waypoint_radius: 6.0
+    waypoint_vertical_radius: 6.0
+    waypoint_dwell_seconds: 2.0
+    message_wait_seconds_per_line: 5.0
     course_radius: 4.0
-    off_course_grace_seconds: 10.0
-    off_course_chat_interval_seconds: 60.0
+    off_course_grace_seconds: 5.0
+    off_course_chat_interval_seconds: 15.0
     follow_display_interval_seconds: 10.0
     flight_speed: 4.0
     follow_flight_speed: 6.0
-    path_curve_deviation: 0.15
 
 effects:
   link_success:
@@ -62,4 +66,4 @@ command_safeguard:
     - "/kill @e[]"
     - "/kill @e"
 
-config_version: 10
+config_version: 14

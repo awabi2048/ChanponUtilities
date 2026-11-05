@@ -18,18 +18,30 @@ data class GuidePoint(
     val message: List<String> = emptyList(),
 )
 
+/** ワールド内の向かい合う頂点で表す自動開始領域です。境界を含みます。 */
+data class GuideAutoStartArea(
+    val worldName: String,
+    val x1: Int, val y1: Int, val z1: Int,
+    val x2: Int, val y2: Int, val z2: Int,
+) {
+    fun contains(world: String, x: Double, y: Double, z: Double): Boolean =
+        world == worldName && x >= minOf(x1, x2) && x <= maxOf(x1, x2) &&
+            y >= minOf(y1, y2) && y <= maxOf(y1, y2) &&
+            z >= minOf(z1, z2) && z <= maxOf(z1, z2)
+}
+
 /**
  * 中継点の列と表示名を持つガイドルートです。
  *
- * 先頭の中継点はガイド開始時に完了済みとして扱われ、開始メッセージとして
- * その message が表示されます。そのためルートは「開始点→順に巡る地点」として
- * 定義し、実際に案内を受ける地点数は points.size - 1 です。
+ * 先頭の中継点はクリックで完了し、以降は範囲内での滞在により進行します。
  */
 data class GuideRoute(
     val id: String,
     val worldName: String,
     val displayName: String?,
     val points: List<GuidePoint>,
+    val midpoints: Map<Int, GuidePoint> = emptyMap(),
+    val autoStart: GuideAutoStartArea? = null,
 ) {
     /** コマンド表示・完了メッセージに使う名前です。 */
     val label: String get() = displayName ?: id
@@ -96,8 +108,48 @@ object GuideRouteCodec {
                 message,
             )
         }
+        // キー 3.5 は3番と4番の中継点の間の通過点を表します。
+        val midpoints = linkedMapOf<Int, GuidePoint>()
+        section.getConfigurationSection("midpoints")?.let { mid ->
+            for (key in mid.getKeys(false)) {
+                val index = key.toIntOrNull()
+                val node = mid.getConfigurationSection(key)
+                val x = node?.get("x") as? Number
+                val y = node?.get("y") as? Number
+                val z = node?.get("z") as? Number
+                if (index == null || index >= points.size || x == null || y == null || z == null ||
+                    !x.toDouble().isFinite() || !y.toDouble().isFinite() || !z.toDouble().isFinite()) {
+                    errors += "routes.$id.midpoints.$key は隣接する中継点間の有限座標で指定してください"
+                } else {
+                    midpoints[index] = GuidePoint(x.toDouble(), y.toDouble(), z.toDouble(), 0f, 0f)
+                }
+            }
+        }
+        // 自動開始は省略可能ですが、指定した場合は全頂点とワールドを厳密に検証します。
+        var autoStart: GuideAutoStartArea? = null
+        if (section.contains("auto_start")) {
+            val area = section.getConfigurationSection("auto_start")
+            val areaWorld = area?.getString("world")
+            fun coordinate(corner: String, axis: String): Int? {
+                val value = area?.get("$corner.$axis")
+                val number = value as? Number
+                if (number == null || number.toDouble() % 1.0 != 0.0 ||
+                    number.toDouble() < Int.MIN_VALUE || number.toDouble() > Int.MAX_VALUE) {
+                    errors += "routes.$id.auto_start.$corner.$axis は整数で指定してください"
+                    return null
+                }
+                return number.toInt()
+            }
+            val x1 = coordinate("from", "x"); val y1 = coordinate("from", "y"); val z1 = coordinate("from", "z")
+            val x2 = coordinate("to", "x"); val y2 = coordinate("to", "y"); val z2 = coordinate("to", "z")
+            if (areaWorld.isNullOrBlank() || areaWorld != world) {
+                errors += "routes.$id.auto_start.world はルートと同じワールド名を指定してください"
+            } else if (x1 != null && y1 != null && z1 != null && x2 != null && y2 != null && z2 != null) {
+                autoStart = GuideAutoStartArea(areaWorld, x1, y1, z1, x2, y2, z2)
+            }
+        }
         if (errors.isNotEmpty()) return ParseResult.Failure(errors)
-        return ParseResult.Success(mapOf(id to GuideRoute(id, world!!, displayName, points)))
+        return ParseResult.Success(mapOf(id to GuideRoute(id, world!!, displayName, points, midpoints, autoStart)))
     }
 
     /** 中継点を YAML セクションへ書き戻します。既存の message は保持されます。 */

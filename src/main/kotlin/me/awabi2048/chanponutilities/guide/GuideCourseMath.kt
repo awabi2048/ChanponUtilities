@@ -192,7 +192,7 @@ object GuideCourseMath {
      * 位置を返します。
      */
     class FlightPath private constructor(
-        private val points: List<Triple<Double, Double, Double>>,
+        val points: List<Triple<Double, Double, Double>>,
         private val cumulative: DoubleArray,
     ) {
         val totalLength: Double get() = cumulative[cumulative.size - 1]
