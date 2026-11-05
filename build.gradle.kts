@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "me.awabi2048"
-version = "26.1105.5"
+version = "26.1105.6"
 
 repositories {
     mavenLocal()
@@ -59,6 +59,8 @@ tasks.processResources {
 }
 
 tasks.shadowJar {
+    // Kotlinメタデータを変換器へ渡してから重複を処理します。
+    duplicatesStrategy = DuplicatesStrategy.WARN
     archiveBaseName.set("Chanpon-Utilities")
     archiveClassifier.set("")
 }

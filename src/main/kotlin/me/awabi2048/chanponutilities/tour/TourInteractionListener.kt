@@ -24,7 +24,7 @@ import org.bukkit.inventory.InventoryHolder
 
 /** 観光中のプレイヤー操作だけを制限し、ホッパー等の搬送には干渉しません。 */
 internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugin) : Listener {
-    private fun bypass(player: Player) = player.hasPermission("chanponutilities.admin")
+    private fun bypass(player: Player) = isTourAdmin(player)
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun open(event: InventoryOpenEvent) {

@@ -33,6 +33,7 @@ import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
 import me.awabi2048.chanponutilities.tour.TourModeListener
 import me.awabi2048.chanponutilities.tour.TourModeWorlds
 import me.awabi2048.chanponutilities.tour.TourInteractionListener
+import me.awabi2048.chanponutilities.tour.isTourAdmin
 import org.bukkit.Bukkit
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.event.HandlerList
@@ -102,7 +103,6 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         try {
             writeModuleStateAtomically(next)
             restartPluginLifecycle("module ${module.id}=$enabled")
-            if (module == ChanponModule.TOUR_MODE && !enabled) restoreTourFlight()
         } catch (failure: Throwable) {
             logger.log(Level.SEVERE, "Chanpon-Utilities module change failed; rolling back ${module.id}", failure)
             runCatching { stopPlugin() }.onFailure(failure::addSuppressed)
@@ -366,7 +366,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     }
 
     private fun restoreTourFlight() {
-        server.onlinePlayers.filterNot { it.hasPermission("chanponutilities.admin") }.forEach { player ->
+        server.onlinePlayers.filterNot(::isTourAdmin).forEach { player ->
             val restored = server.pluginManager.isPluginEnabled("MyWorldManager") && TourModeWorlds.restore(player)
             if (!restored && player.gameMode == org.bukkit.GameMode.ADVENTURE) {
                 if (player.isFlying) player.isFlying = false
@@ -409,11 +409,14 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private fun restartPluginLifecycle(reason: String) {
         check(!lifecycleTransition) { "Chanpon-Utilities lifecycle restart is already in progress" }
+        val wasTourEnabled = lifecycleActive && isModuleEnabled(ChanponModule.TOUR_MODE)
         lifecycleTransition = true
         try {
             stopPlugin()
             try {
                 startPlugin()
+                // /cu だけでなく設定の再読込による無効化でも既存の飛行ルールへ戻します。
+                if (wasTourEnabled && !isModuleEnabled(ChanponModule.TOUR_MODE)) restoreTourFlight()
                 logger.info("Chanpon-Utilities $reason lifecycle restarted.")
             } catch (failure: Throwable) {
                 runCatching { stopPlugin() }.onFailure(failure::addSuppressed)

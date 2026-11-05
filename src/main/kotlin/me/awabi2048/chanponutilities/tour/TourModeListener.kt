@@ -14,7 +14,7 @@ import org.bukkit.event.player.PlayerJoinEvent
 
 /** 定期監視を使わず、参加・移動・モード変更の境界で観光状態を整えます。 */
 internal class TourModeListener(private val plugin: ChanponUtilitiesPlugin) : Listener {
-    private fun bypass(player: Player): Boolean = player.hasPermission("chanponutilities.admin")
+    private fun bypass(player: Player): Boolean = isTourAdmin(player)
 
     fun sync(player: Player) {
         if (!player.isOnline || bypass(player)) return
