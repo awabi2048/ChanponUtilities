@@ -1,8 +1,8 @@
 package me.awabi2048.chanponutilities.guide
 
-/** 出現・消滅の10 tick、1ブロック、1回転を共通の進行率で計算します。 */
+/** 出現・消滅の20 tick、1ブロック、1回転を共通の進行率で計算します。 */
 internal object GuideLifecycleAnimation {
-    const val DURATION_TICKS = 10
+    const val DURATION_TICKS = 20
     data class Frame(val y: Double, val yaw: Float, val scale: Double)
 
     fun appearing(targetY: Double, yaw: Float, tick: Int): Frame {

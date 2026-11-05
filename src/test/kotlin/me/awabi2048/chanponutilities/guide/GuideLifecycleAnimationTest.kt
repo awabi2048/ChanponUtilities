@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test
 class GuideLifecycleAnimationTest {
     @Test fun `出現は1ブロック上昇し一回転して所定位置と大きさに到達する`() {
         val start = GuideLifecycleAnimation.appearing(64.0, 30f, 0)
-        val middle = GuideLifecycleAnimation.appearing(64.0, 30f, 5)
-        val end = GuideLifecycleAnimation.appearing(64.0, 30f, 10)
+        val middle = GuideLifecycleAnimation.appearing(64.0, 30f, 10)
+        val end = GuideLifecycleAnimation.appearing(64.0, 30f, 20)
         assertEquals(63.0, start.y, 1e-9)
         assertEquals(0.0, start.scale, 1e-9)
         assertEquals(63.5, middle.y, 1e-9)
@@ -20,8 +20,8 @@ class GuideLifecycleAnimationTest {
 
     @Test fun `消滅は途中の大きさからも連続して1ブロック上昇する`() {
         val start = GuideLifecycleAnimation.disappearing(64.2, -15f, 1.2, 0)
-        val middle = GuideLifecycleAnimation.disappearing(64.2, -15f, 1.2, 5)
-        val end = GuideLifecycleAnimation.disappearing(64.2, -15f, 1.2, 10)
+        val middle = GuideLifecycleAnimation.disappearing(64.2, -15f, 1.2, 10)
+        val end = GuideLifecycleAnimation.disappearing(64.2, -15f, 1.2, 20)
         assertEquals(1.2, start.scale, 1e-9)
         assertEquals(64.7, middle.y, 1e-9)
         assertEquals(0.6, middle.scale, 1e-9)

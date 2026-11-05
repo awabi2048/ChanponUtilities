@@ -34,8 +34,8 @@ features:
     waypoint_dwell_seconds: 2.0
     message_wait_seconds_per_line: 5.0
     course_radius: 4.0
-    off_course_grace_seconds: 10.0
-    off_course_chat_interval_seconds: 60.0
+    off_course_grace_seconds: 5.0
+    off_course_chat_interval_seconds: 15.0
     follow_display_interval_seconds: 10.0
     flight_speed: 4.0
     follow_flight_speed: 6.0
@@ -66,4 +66,4 @@ command_safeguard:
     - "/kill @e[]"
     - "/kill @e"
 
-config_version: 13
+config_version: 14

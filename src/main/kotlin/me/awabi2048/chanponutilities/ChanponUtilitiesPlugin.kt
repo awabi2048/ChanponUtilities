@@ -235,6 +235,11 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                                 if (value != null) config.set(path, value.toDouble() * 2.0)
                             }
                         },
+                        13 to ConfigMigration { config ->
+                            // 新仕様を既存環境にも反映します。
+                            config.set("features.guide_array.off_course_grace_seconds", 5.0)
+                            config.set("features.guide_array.off_course_chat_interval_seconds", 15.0)
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -314,8 +319,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     waypointDwellSeconds = config.getDouble("features.guide_array.waypoint_dwell_seconds", 2.0),
                     messageWaitSecondsPerLine = config.getDouble("features.guide_array.message_wait_seconds_per_line", 5.0),
                     courseRadius = config.getDouble("features.guide_array.course_radius", 4.0),
-                    offCourseGraceSeconds = config.getDouble("features.guide_array.off_course_grace_seconds", 10.0),
-                    offCourseChatIntervalSeconds = config.getDouble("features.guide_array.off_course_chat_interval_seconds", 60.0),
+                    offCourseGraceSeconds = config.getDouble("features.guide_array.off_course_grace_seconds", 5.0),
+                    offCourseChatIntervalSeconds = config.getDouble("features.guide_array.off_course_chat_interval_seconds", 15.0),
                     followDisplayIntervalSeconds = config.getDouble("features.guide_array.follow_display_interval_seconds", 10.0),
                     flightSpeed = config.getDouble("features.guide_array.flight_speed", 4.0),
                     followFlightSpeed = config.getDouble("features.guide_array.follow_flight_speed", 6.0),
@@ -548,7 +553,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 13
+        const val CONFIG_VERSION = 14
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }
