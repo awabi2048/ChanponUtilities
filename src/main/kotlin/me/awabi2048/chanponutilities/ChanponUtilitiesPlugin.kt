@@ -30,6 +30,9 @@ import me.awabi2048.chanponutilities.safety.TourSafetyListener
 import me.awabi2048.chanponutilities.safety.TourSafetyPreferenceStore
 import me.awabi2048.chanponutilities.safety.TourSafetyService
 import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
+import me.awabi2048.chanponutilities.tour.TourModeListener
+import me.awabi2048.chanponutilities.tour.TourModeWorlds
+import me.awabi2048.chanponutilities.tour.TourInteractionListener
 import org.bukkit.Bukkit
 import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.event.HandlerList
@@ -99,6 +102,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         try {
             writeModuleStateAtomically(next)
             restartPluginLifecycle("module ${module.id}=$enabled")
+            if (module == ChanponModule.TOUR_MODE && !enabled) restoreTourFlight()
         } catch (failure: Throwable) {
             logger.log(Level.SEVERE, "Chanpon-Utilities module change failed; rolling back ${module.id}", failure)
             runCatching { stopPlugin() }.onFailure(failure::addSuppressed)
@@ -240,6 +244,10 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                             config.set("features.guide_array.off_course_grace_seconds", 5.0)
                             config.set("features.guide_array.off_course_chat_interval_seconds", 15.0)
                         },
+                        14 to ConfigMigration { config ->
+                            // 新規導入時は観光期間を自動開始しません。
+                            if (!config.contains("features.tour_mode.enabled")) config.set("features.tour_mode.enabled", false)
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -347,7 +355,24 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         } else if (!server.pluginManager.isPluginEnabled("MyWorldManager")) {
             logger.info("MyWorldManager is unavailable; player-state integration is disabled.")
         }
+        if (isModuleEnabled(ChanponModule.TOUR_MODE)) {
+            val tour = TourModeListener(this)
+            server.pluginManager.registerEvents(tour, this)
+            server.pluginManager.registerEvents(TourInteractionListener(this), this)
+            // 他のワールド同期が終わった後で、既に接続中の利用者にも適用します。
+            server.scheduler.runTask(this, Runnable { server.onlinePlayers.forEach(tour::sync) })
+        }
         lifecycleActive = true
+    }
+
+    private fun restoreTourFlight() {
+        server.onlinePlayers.filterNot { it.hasPermission("chanponutilities.admin") }.forEach { player ->
+            val restored = server.pluginManager.isPluginEnabled("MyWorldManager") && TourModeWorlds.restore(player)
+            if (!restored && player.gameMode == org.bukkit.GameMode.ADVENTURE) {
+                if (player.isFlying) player.isFlying = false
+                player.allowFlight = false
+            }
+        }
     }
 
     private fun stopPlugin() {
@@ -553,7 +578,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 14
+        const val CONFIG_VERSION = 15
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }

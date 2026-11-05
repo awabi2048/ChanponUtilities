@@ -1,4 +1,6 @@
 features:
+  tour_mode:
+    enabled: false
   lectern_bookshelf_link:
     enabled: true
     sneak_read:
@@ -66,4 +68,4 @@ command_safeguard:
     - "/kill @e[]"
     - "/kill @e"
 
-config_version: 14
+config_version: 15

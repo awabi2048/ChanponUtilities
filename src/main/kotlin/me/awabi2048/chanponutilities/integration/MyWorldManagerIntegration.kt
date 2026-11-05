@@ -4,6 +4,7 @@ import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.listener.PlayerStatePolicyListener
 import me.awabi2048.chanponutilities.policy.ChanponPlayerStatePolicy
 import me.awabi2048.myworldmanager.api.MyWorldManagerApi
+import me.awabi2048.chanponutilities.module.ChanponModule
 
 /** MWMが実際に有効な場合だけロードする任意連携境界。 */
 class MyWorldManagerIntegration private constructor(
@@ -15,7 +16,7 @@ class MyWorldManagerIntegration private constructor(
 
     companion object {
         fun enable(plugin: ChanponUtilitiesPlugin): MyWorldManagerIntegration {
-            val policy = ChanponPlayerStatePolicy()
+            val policy = ChanponPlayerStatePolicy { plugin.isModuleEnabled(ChanponModule.TOUR_MODE) }
             return try {
                 MyWorldManagerApi.registerWorldPlayerStatePolicy(policy)
                 plugin.server.pluginManager.registerEvents(PlayerStatePolicyListener(plugin), plugin)
