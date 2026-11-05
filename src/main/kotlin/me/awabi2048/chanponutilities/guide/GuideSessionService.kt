@@ -31,6 +31,12 @@ class GuideSessionService(
 ) {
     private val renderer = GuideAllayRenderer(plugin, ::handleInteract)
     private val sessions = HashMap<UUID, GuideSession>()
+    private val departures = mutableListOf<Departure>()
+
+    private data class Departure(
+        val player: Player, val entityId: Int, val worldName: String,
+        val pose: GuideAllayRenderer.Pose, var tick: Int = 0,
+    )
     private var tickTaskId = -1
 
     /** ガイドモジュールの設定値です。config reload はライフサイクル再起動を伴うため生成時の snapshot で構いません。 */
@@ -50,6 +56,8 @@ class GuideSessionService(
     )
 
     private enum class Phase {
+        /** 出現演出中はクリックや経路判定を受け付けません。 */
+        APPEARING,
         /** 中継点で待機しており、クリックを受け付ける状態です。 */
         WAITING,
 
@@ -97,6 +105,7 @@ class GuideSessionService(
         var recoveryMotion: GuideRecoveryMotion = GuideRecoveryMotion(),
         var guidingBack: Boolean = false,
         var ended: Boolean = false,
+        var appearanceTick: Int = 0,
     )
 
     fun isRunning(): Boolean = tickTaskId != -1
@@ -111,8 +120,10 @@ class GuideSessionService(
             plugin.server.scheduler.cancelTask(tickTaskId)
             tickTaskId = -1
         }
-        sessions.values.forEach { destroyEntities(it) }
+        sessions.values.forEach { if (!it.ended) destroyEntities(it) }
         sessions.clear()
+        departures.forEach { renderer.destroy(it.player, it.entityId) }
+        departures.clear()
         renderer.unregister()
     }
 
@@ -142,7 +153,7 @@ class GuideSessionService(
             .deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME))
         val entityId = renderer.spawn(
             player,
-            first.x, first.y, first.z,
+            first.x, first.y - 1.0, first.z,
             first.yaw, first.pitch,
             name,
         )
@@ -152,7 +163,7 @@ class GuideSessionService(
             entityId = entityId,
             nextIndex = 0,
             x = first.x, y = first.y, z = first.z,
-            phase = Phase.WAITING,
+            phase = Phase.APPEARING,
         )
         sessions[player.uniqueId] = session
         player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_AWAIT_FIRST_CLICK))
@@ -168,7 +179,8 @@ class GuideSessionService(
 
     /** ログアウト時の静かな破棄です。client 側の仮想実体も接続断で消えます。 */
     fun onQuit(player: Player) {
-        sessions.remove(player.uniqueId)?.let { destroyEntities(it) }
+        sessions.remove(player.uniqueId)?.let { if (!it.ended) destroyEntities(it) }
+        discardDepartures(player)
     }
 
     /**
@@ -176,15 +188,42 @@ class GuideSessionService(
      * セッションを終了し、退出が発生したかを返します。
      */
     fun onWorldLeft(player: Player): Boolean {
+        // ワールド切替後には旧ワールドでの消滅演出を継続できません。
+        discardDepartures(player)
         val session = sessions[player.uniqueId] ?: return false
         if (player.world.name == session.route.worldName) return false
         sessions.remove(player.uniqueId)
-        destroyEntities(session)
+        if (!session.ended) destroyEntities(session)
         return true
     }
 
     private fun stopSession(player: Player) {
-        sessions.remove(player.uniqueId)?.let { destroyEntities(it) }
+        sessions.remove(player.uniqueId)?.let { if (!it.ended) beginDeparture(it) }
+    }
+
+    /** 通常終了・中断・置換時は最後の表示姿勢を保持して10 tick消滅演出を行います。 */
+    private fun beginDeparture(session: GuideSession) {
+        if (session.displayEntityId != -1) {
+            renderer.destroy(session.player, session.displayEntityId)
+            session.displayEntityId = -1
+        }
+        val pose = renderer.pose(session.entityId)
+        if (pose == null || !session.player.isOnline || session.player.world.name != session.route.worldName) {
+            renderer.destroy(session.player, session.entityId)
+        } else {
+            departures.add(Departure(session.player, session.entityId, session.route.worldName, pose))
+        }
+    }
+
+    private fun discardDepartures(player: Player) {
+        val iterator = departures.iterator()
+        while (iterator.hasNext()) {
+            val item = iterator.next()
+            if (item.player.uniqueId == player.uniqueId) {
+                renderer.destroy(item.player, item.entityId)
+                iterator.remove()
+            }
+        }
     }
 
     private fun destroyEntities(session: GuideSession) {
@@ -225,7 +264,7 @@ class GuideSessionService(
                 }
             }
             // 飛行中・帰還中のアレイはクリックを受け付けません。
-            Phase.FLYING, Phase.RETURNING -> Unit
+            Phase.APPEARING, Phase.FLYING, Phase.RETURNING -> Unit
         }
     }
 
@@ -251,7 +290,7 @@ class GuideSessionService(
         session.offCourseTicks = 0
         if (session.nextIndex >= session.route.points.size) {
             session.ended = true
-            destroyEntities(session)
+            beginDeparture(session)
             player.sendMessage(
                 ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_COMPLETED, "route" to session.route.label)
             )
@@ -293,6 +332,7 @@ class GuideSessionService(
     }
 
     private fun tickAll() {
+        tickDepartures()
         if (sessions.isEmpty()) return
         val iterator = sessions.values.iterator()
         while (iterator.hasNext()) {
@@ -306,12 +346,46 @@ class GuideSessionService(
         }
     }
 
+    private fun tickDepartures() {
+        val iterator = departures.iterator()
+        while (iterator.hasNext()) {
+            val item = iterator.next()
+            if (!item.player.isOnline || item.player.world.name != item.worldName) {
+                renderer.destroy(item.player, item.entityId)
+                iterator.remove()
+                continue
+            }
+            val frame = GuideLifecycleAnimation.disappearing(item.pose.y, item.pose.yaw, item.pose.scale, ++item.tick)
+            renderer.sendScale(item.player, item.entityId, frame.scale)
+            renderer.moveTo(item.player, item.entityId, item.pose.x, frame.y, item.pose.z, frame.yaw, item.pose.pitch)
+            if (item.tick >= GuideLifecycleAnimation.DURATION_TICKS) {
+                renderer.destroy(item.player, item.entityId)
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun tickAppearance(session: GuideSession) {
+        val point = session.route.points.first()
+        val tick = ++session.appearanceTick
+        val frame = GuideLifecycleAnimation.appearing(point.y, point.yaw, tick)
+        renderer.sendScale(session.player, session.entityId, frame.scale)
+        renderer.moveTo(session.player, session.entityId, point.x, frame.y, point.z, frame.yaw, point.pitch)
+        if (tick == 1) renderer.reveal(session.player, session.entityId)
+        if (tick >= GuideLifecycleAnimation.DURATION_TICKS) session.phase = Phase.WAITING
+    }
+
     private fun tick(session: GuideSession) {
         val player = session.player
         if (player.world.name != session.route.worldName) return
 
         session.movingThisTick = false
+        if (session.phase == Phase.APPEARING) {
+            tickAppearance(session)
+            return
+        }
         when (session.phase) {
+            Phase.APPEARING -> error("出現演出は先に処理されます")
             Phase.WAITING -> tickWaiting(session)
             Phase.FLYING, Phase.RETURNING -> tickFlight(session)
             Phase.FOLLOWING -> tickFollowing(session)

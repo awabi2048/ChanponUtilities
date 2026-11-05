@@ -50,6 +50,8 @@ internal class GuideAllayRenderer(
     // client が知る直近の絶対位置です。移動は相対 packet（PosRot）で送るため、
     // 送信済み位置との差分から相対量を求めます。
     private val sentPositions = ConcurrentHashMap<Int, Vector>()
+    private val sentAngles = ConcurrentHashMap<Int, Pair<Float, Float>>()
+    private val sentScales = ConcurrentHashMap<Int, Double>()
 
     private val interactListener: PacketListener = object : PacketAdapter(
         plugin,
@@ -77,6 +79,8 @@ internal class GuideAllayRenderer(
         runCatching { manager.removePacketListener(interactListener) }
         managedIds.clear()
         sentPositions.clear()
+        sentAngles.clear()
+        sentScales.clear()
     }
 
     /**
@@ -107,9 +111,11 @@ internal class GuideAllayRenderer(
         spawn.vectors.write(0, Vector(0, 0, 0))
         send(viewer, spawn)
         sentPositions[id] = Vector(x, y, z)
+        sentAngles[id] = yaw to pitch
 
-        sendMetadata(viewer, id, displayName)
-        sendScale(viewer, id)
+        // クライアントの最小 scale は正数のため、最初は名前も含め非表示にします。
+        sendMetadata(viewer, id, displayName, invisible = true)
+        sendScale(viewer, id, 0.0)
         return id
     }
 
@@ -118,13 +124,15 @@ internal class GuideAllayRenderer(
      * 拡縮は metadata ではなく scale 属性として同期するため、
      * UPDATE_ATTRIBUTES packet で送ります。
      */
-    private fun sendScale(viewer: Player, id: Int) {
+    fun sendScale(viewer: Player, id: Int, value: Double) {
+        val effective = value.coerceIn(MIN_SCALE, ALLAY_SCALE)
+        sentScales[id] = effective
         runCatching {
             val packet = manager.createPacket(PacketType.Play.Server.UPDATE_ATTRIBUTES)
             packet.integers.write(0, id)
             val scale = WrappedAttribute.newBuilder()
                 .attributeKey("scale")
-                .baseValue(ALLAY_SCALE)
+                .baseValue(effective)
                 .packet(packet)
                 .build()
             packet.attributeCollectionModifier.write(0, listOf(scale))
@@ -134,22 +142,42 @@ internal class GuideAllayRenderer(
         }
     }
 
-    private fun sendMetadata(viewer: Player, id: Int, displayName: net.kyori.adventure.text.Component) {
+    private fun sendMetadata(viewer: Player, id: Int, displayName: net.kyori.adventure.text.Component, invisible: Boolean) {
         val nameJson = GsonComponentSerializer.gson().serialize(displayName)
         val nameHandle = WrappedChatComponent.fromJson(nameJson).handle
         val values = listOf(
             // index 0: shared flags。bit 0x40 が glowing です。平常時は消灯し、
             // コース逸脱の案内中だけ点けます。
-            WrappedDataValue(ID_SHARED_FLAGS, byteSerializer(), 0x00.toByte()),
+            WrappedDataValue(ID_SHARED_FLAGS, byteSerializer(), if (invisible) FLAG_INVISIBLE else 0x00.toByte()),
             // index 2: カスタム名（Optional<ChatComponent>）。
             WrappedDataValue(ID_CUSTOM_NAME, optionalChatSerializer(), Optional.of(nameHandle)),
             // index 3: カスタム名の常時表示。
-            WrappedDataValue(ID_NAME_VISIBLE, booleanSerializer(), true),
+            WrappedDataValue(ID_NAME_VISIBLE, booleanSerializer(), !invisible),
         )
         val packet = manager.createPacket(PacketType.Play.Server.ENTITY_METADATA)
         packet.integers.write(0, id)
         packet.dataValueCollectionModifier.write(0, values)
         send(viewer, packet)
+    }
+
+    /** 出現演出開始時に非表示だったアレイと名前を表示します。 */
+    fun reveal(viewer: Player, id: Int) {
+        val packet = manager.createPacket(PacketType.Play.Server.ENTITY_METADATA)
+        packet.integers.write(0, id)
+        packet.dataValueCollectionModifier.write(0, listOf(
+            WrappedDataValue(ID_SHARED_FLAGS, byteSerializer(), 0x00.toByte()),
+            WrappedDataValue(ID_NAME_VISIBLE, booleanSerializer(), true),
+        ))
+        send(viewer, packet)
+    }
+
+    data class Pose(val x: Double, val y: Double, val z: Double, val yaw: Float, val pitch: Float, val scale: Double)
+
+    /** 浮遊を含む直近の表示座標と向きから、消滅演出を途切れず開始します。 */
+    fun pose(id: Int): Pose? {
+        val position = sentPositions[id] ?: return null
+        val angles = sentAngles[id] ?: return null
+        return Pose(position.x, position.y, position.z, angles.first, angles.second, sentScales[id] ?: ALLAY_SCALE)
     }
 
     /**
@@ -269,6 +297,7 @@ internal class GuideAllayRenderer(
             sent = Vector(tx, ty, tz)
         }
         sentPositions[id] = Vector(x, y, z)
+        sentAngles[id] = yaw to pitch
 
         val headRotation = manager.createPacket(PacketType.Play.Server.ENTITY_HEAD_ROTATION)
         headRotation.integers.write(0, id)
@@ -279,6 +308,8 @@ internal class GuideAllayRenderer(
     fun destroy(viewer: Player, id: Int) {
         managedIds -= id
         sentPositions.remove(id)
+        sentAngles.remove(id)
+        sentScales.remove(id)
         if (!viewer.isOnline) return
         val packet = manager.createPacket(PacketType.Play.Server.ENTITY_DESTROY)
         packet.intLists.write(0, listOf(id))
@@ -327,6 +358,9 @@ internal class GuideAllayRenderer(
         const val ID_STYLE_FLAGS: Int = 27
 
         const val FLAG_GLOWING: Byte = 0x40
+        const val FLAG_INVISIBLE: Byte = 0x20
+        // 26.2 の scale 属性は [1/16, 16] に制限されています。
+        const val MIN_SCALE: Double = 0.0625
         const val BILLBOARD_CENTER: Byte = 3
         const val TEXT_LINE_WIDTH: Int = 200
         const val TEXT_BACKGROUND_ARGB: Int = 0x40000000
