@@ -361,7 +361,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
             // 有効化コマンドの完了を待たず、接続中の利用者へ現在の状態を適用します。
             server.onlinePlayers.forEach(tour::sync)
-            // 他の同期が同じtickに飛行設定を更新しても、次tickに整合を取り直します。
+            // 他の同期と同じtickに飛行設定を更新された場合でも、次tickに合わせて整合し直します。
             server.scheduler.runTask(this, Runnable { server.onlinePlayers.forEach(tour::sync) })
         }
         lifecycleActive = true
