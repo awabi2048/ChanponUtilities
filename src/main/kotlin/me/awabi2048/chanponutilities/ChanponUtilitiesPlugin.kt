@@ -359,7 +359,9 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             val tour = TourModeListener(this)
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
-            // 他のワールド同期が終わった後で、既に接続中の利用者にも適用します。
+            // 有効化コマンドの完了を待たず、接続中の利用者へ現在の状態を適用します。
+            server.onlinePlayers.forEach(tour::sync)
+            // 他の同期が同じtickに飛行設定を更新しても、次tickに整合を取り直します。
             server.scheduler.runTask(this, Runnable { server.onlinePlayers.forEach(tour::sync) })
         }
         lifecycleActive = true
