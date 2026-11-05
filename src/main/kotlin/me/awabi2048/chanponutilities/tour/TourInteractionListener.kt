@@ -15,6 +15,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.hanging.HangingBreakByEntityEvent
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.inventory.InventoryOpenEvent
@@ -86,6 +87,20 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
         // TNT・Creeper等の爆発は発射者経路に載らないため、提出保護リージョンの爆発フラグで防ぎます。
         val player = event.damager as? Player
             ?: (event.damager as? Projectile)?.shooter as? Player
+            ?: return
+        if (bypass(player)) return
+        event.isCancelled = true
+    }
+
+    /**
+     * 額縁・絵画などの吊り下げエンティティはダメージではなく専用の破壊イベントで消えるため、
+     * プレイヤーが関与する破壊を別途拒否します。
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun hangingBreak(event: HangingBreakByEntityEvent) {
+        // 近接攻撃だけでなく、矢などで射抜いた場合も発射者をたどって拒否します。
+        val player = event.remover as? Player
+            ?: (event.remover as? Projectile)?.shooter as? Player
             ?: return
         if (bypass(player)) return
         event.isCancelled = true
