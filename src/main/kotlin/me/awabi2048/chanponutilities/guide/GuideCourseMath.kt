@@ -51,6 +51,9 @@ object GuideCourseMath {
     /** 全状態で32ブロック以上離れたアレイをプレイヤー付近へ再配置します。 */
     fun shouldTeleport(distanceSquared: Double): Boolean = distanceSquared >= 32.0 * 32.0
 
+    /** 追従速度はプレイヤーまでの距離の3分の1 [ブロック/秒] です。 */
+    fun followSpeed(distance: Double): Double = distance / 3.0
+
     /** 標本列を一時的なペア一覧へ複製せずに判定します。 */
     fun isNearPath(x: Double, y: Double, z: Double, points: List<Triple<Double, Double, Double>>, radius: Double): Boolean {
         for (i in 1 until points.size) {

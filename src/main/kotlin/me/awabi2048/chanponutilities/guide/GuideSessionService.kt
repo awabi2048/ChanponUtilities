@@ -27,7 +27,7 @@ class GuideSessionService(
     private val renderer = GuideAllayRenderer(plugin, ::handleInteract)
     private val sessions = HashMap<UUID, GuideSession>()
     private val departures = mutableListOf<Departure>()
-    private val lastStopButtonNanos = HashMap<UUID, Long>()
+    private val periodicMessageCounts = HashMap<UUID, Int>()
 
     private data class Departure(
         val player: Player, val entityId: Int, val worldName: String,
@@ -177,7 +177,7 @@ class GuideSessionService(
     fun onQuit(player: Player) {
         sessions.remove(player.uniqueId)?.let { if (!it.ended) destroyEntities(it) }
         discardDepartures(player)
-        lastStopButtonNanos.remove(player.uniqueId)
+        periodicMessageCounts.remove(player.uniqueId)
     }
 
     /**
@@ -201,6 +201,10 @@ class GuideSessionService(
     /** 通常終了・中断・置換時は最後の表示姿勢を保持して20 tick消滅演出を行います。 */
     private fun beginDeparture(session: GuideSession) {
         session.player.playSound(session.player.location, Sound.ENTITY_ALLAY_AMBIENT_WITHOUT_ITEM, 1.0f, 1.25f)
+        if (session.glowing) {
+            renderer.setGlowing(session.player, session.entityId, false)
+            session.glowing = false
+        }
         renderer.setName(session.player, session.entityId, null, false)
         val pose = renderer.pose(session.entityId)
         if (pose == null || !session.player.isOnline || session.player.world.name != session.route.worldName) {
@@ -364,6 +368,7 @@ class GuideSessionService(
             val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
             val bob = bobOffset(session)
             renderer.moveTo(player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
+            updateGlow(session)
             updateName(session)
             checkOffCourse(session)
             showParticles(session)
@@ -382,9 +387,18 @@ class GuideSessionService(
         }
         if (session.ended) return
         checkOffCourse(session)
+        updateGlow(session)
         updateName(session)
         showParticles(session)
         if (settings.debug && session.particleTicks % 10 == 0) showDebug(session)
+    }
+
+    /** 発光状態は案内地点での待機状態から一元的に決めます。 */
+    private fun updateGlow(session: GuideSession) {
+        val shouldGlow = session.phase == Phase.WAITING
+        if (session.glowing == shouldGlow) return
+        session.glowing = shouldGlow
+        renderer.setGlowing(session.player, session.entityId, shouldGlow)
     }
 
     /** プレイヤーとアレイの3次元距離が32ブロック以上なら再配置します。 */
@@ -616,7 +630,11 @@ class GuideSessionService(
         val flight = session.flight
         val previous = Triple(session.x, session.y, session.z)
         if (flight != null) {
-            val pos = flight.advance(flightStep(session, flight, settings.followFlightSpeed))
+            // 追従時はプレイヤーとの直線距離に比例し、遠いほど速く接近します。
+            val player = session.player.location
+            val distance = kotlin.math.sqrt(GuideCourseMath.distanceSq(
+                session.x, session.y, session.z, player.x, player.y, player.z))
+            val pos = flight.advance(GuideCourseMath.followSpeed(distance) / TICKS_PER_SECOND)
             session.x = pos.first
             session.y = pos.second
             session.z = pos.third
@@ -633,15 +651,11 @@ class GuideSessionService(
         updateFollowDisplay(session)
         updateName(session)
 
-        // 長周期のシステムチャットです。最初の発火後にアレイが発光を開始します。
+        // 追従中の案内を長周期でチャットへ送ります。
         val chatInterval = (settings.offCourseChatIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
         if (session.followTicks % chatInterval == 0) {
             // 再翻訳せず表示済みの文を使い、言語変更のタイミングでも表示と一致させます。
             session.currentName?.let { sendPeriodicGuide(session.player, it) }
-            if (!session.glowing) {
-                session.glowing = true
-                renderer.setGlowing(session.player, session.entityId, true)
-            }
         }
     }
 
@@ -678,18 +692,19 @@ class GuideSessionService(
         }
     }
 
-    /** ボタンの表示時刻をプレイヤーごとに保持し、連続表示を抑えます。 */
+    /** 案内メッセージの5回に1回、中断ボタンを表示します。 */
     private fun sendPeriodicGuide(player: Player, message: String) {
         val serializer = LegacyComponentSerializer.legacySection()
         var result = serializer.deserialize(message)
-        val now = System.nanoTime()
-        val last = lastStopButtonNanos[player.uniqueId]
-        if (last == null || now - last >= 10_000_000_000L) {
+        val count = (periodicMessageCounts[player.uniqueId] ?: 0) + 1
+        if (count >= 5) {
             val button = serializer.deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STOP_BUTTON))
                 .clickEvent(ClickEvent.runCommand("/guide stop"))
                 .hoverEvent(HoverEvent.showText(serializer.deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STOP_HOVER))))
             result = result.append(net.kyori.adventure.text.Component.space()).append(button)
-            lastStopButtonNanos[player.uniqueId] = now
+            periodicMessageCounts[player.uniqueId] = 0
+        } else {
+            periodicMessageCounts[player.uniqueId] = count
         }
         player.sendMessage(result)
     }

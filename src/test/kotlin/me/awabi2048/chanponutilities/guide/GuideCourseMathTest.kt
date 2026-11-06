@@ -7,6 +7,11 @@ import org.junit.jupiter.api.Test
 import kotlin.math.abs
 
 class GuideCourseMathTest {
+    @Test fun `following speed is one third of player distance`() {
+        assertEquals(0.0, GuideCourseMath.followSpeed(0.0), 1e-9)
+        assertEquals(2.0, GuideCourseMath.followSpeed(6.0), 1e-9)
+        assertEquals(8.0, GuideCourseMath.followSpeed(24.0), 1e-9)
+    }
     @Test fun `teleport threshold includes exactly 32 blocks`() {
         assertFalse(GuideCourseMath.shouldTeleport(1023.99))
         assertTrue(GuideCourseMath.shouldTeleport(1024.0))
