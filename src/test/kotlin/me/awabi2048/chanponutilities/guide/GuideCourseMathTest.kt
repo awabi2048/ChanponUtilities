@@ -7,6 +7,10 @@ import org.junit.jupiter.api.Test
 import kotlin.math.abs
 
 class GuideCourseMathTest {
+    @Test fun `teleport threshold includes exactly 32 blocks`() {
+        assertFalse(GuideCourseMath.shouldTeleport(1023.99))
+        assertTrue(GuideCourseMath.shouldTeleport(1024.0))
+    }
     @Test fun `arrows describe the destination relative to player yaw`() {
         assertEquals("↑", GuideCourseMath.relativeArrow(0f, 0.0, 5.0))
         assertEquals("←", GuideCourseMath.relativeArrow(0f, 5.0, 0.0))

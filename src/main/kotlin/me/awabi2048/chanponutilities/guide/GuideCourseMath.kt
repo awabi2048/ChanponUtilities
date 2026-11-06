@@ -48,6 +48,9 @@ object GuideCourseMath {
     /** コース内では12ブロック以上離れた場合にその場で待ちます。 */
     fun shouldPauseForDistance(onCourse: Boolean, distanceSquared: Double): Boolean = onCourse && distanceSquared >= 144.0
 
+    /** 全状態で32ブロック以上離れたアレイをプレイヤー付近へ再配置します。 */
+    fun shouldTeleport(distanceSquared: Double): Boolean = distanceSquared >= 32.0 * 32.0
+
     /** 標本列を一時的なペア一覧へ複製せずに判定します。 */
     fun isNearPath(x: Double, y: Double, z: Double, points: List<Triple<Double, Double, Double>>, radius: Double): Boolean {
         for (i in 1 until points.size) {

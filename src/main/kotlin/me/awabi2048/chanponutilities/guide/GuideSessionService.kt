@@ -70,7 +70,7 @@ class GuideSessionService(
     private class GuideSession(
         val player: Player,
         val route: GuideRoute,
-        val entityId: Int,
+        var entityId: Int,
         var nextIndex: Int,
         var x: Double,
         var y: Double,
@@ -98,6 +98,8 @@ class GuideSessionService(
         var movementNoisePhase: Double = 0.0,
         var pathRetryTicks: Int = 0,
         var waypointProgress: GuideWaypointProgress? = null,
+        var relocatedDuringMessageWait: Boolean = false,
+        var lastTeleportAttempt: Long = -20,
         var pausedForDistance: Boolean = false,
         var ended: Boolean = false,
         var appearanceTick: Int = 0,
@@ -248,6 +250,7 @@ class GuideSessionService(
 
     private fun advanceWaypoint(session: GuideSession) {
         session.waypointProgress = null
+        session.relocatedDuringMessageWait = false
         session.nextIndex++
         session.offCourseTicks = 0
         if (session.nextIndex >= session.route.points.size) {
@@ -341,6 +344,10 @@ class GuideSessionService(
         if (session.elapsedTicks % 10L == 1L) showActionBar(session)
 
         session.movingThisTick = false
+        if (session.elapsedTicks - session.lastTeleportAttempt >= 20 && shouldTeleportNearPlayer(session)) {
+            session.lastTeleportAttempt = session.elapsedTicks
+            teleportNearPlayer(session)
+        }
         if (session.phase == Phase.APPEARING) {
             tickAppearance(session)
             return
@@ -378,6 +385,46 @@ class GuideSessionService(
         updateName(session)
         showParticles(session)
         if (settings.debug && session.particleTicks % 10 == 0) showDebug(session)
+    }
+
+    /** プレイヤーとアレイの3次元距離が32ブロック以上なら再配置します。 */
+    private fun shouldTeleportNearPlayer(session: GuideSession): Boolean {
+        val location = session.player.location
+        return GuideCourseMath.shouldTeleport(GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z))
+    }
+
+    /** 移動先の空きだけを確認し、仮想アレイを新しい位置へ直接再生成します。 */
+    private fun teleportNearPlayer(session: GuideSession) {
+        val player = session.player
+        val location = player.location
+        val target = session.route.points[session.nextIndex]
+        val candidate = GuideFollowAnchor.candidates(location.x, location.y, location.z, target.x, target.z)
+            .firstOrNull { (x, y, z) -> canOccupyAllay(player.world, x, y, z) } ?: return
+        val (x, y, z) = candidate
+        val (yaw, pitch) = GuideCourseMath.lookAngles(x, y + ALLAY_HEIGHT / 2.0, z, target.x, target.y, target.z)
+        val label = session.currentName ?: ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
+        renderer.destroy(player, session.entityId)
+        session.entityId = renderer.spawn(player, x, y, z, yaw, pitch, LegacyComponentSerializer.legacySection().deserialize(label))
+        renderer.sendScale(player, session.entityId, GuideAllayDimensions.SCALE)
+        renderer.reveal(player, session.entityId)
+        renderer.setName(player, session.entityId, LegacyComponentSerializer.legacySection().deserialize(label), true)
+        if (session.glowing) renderer.setGlowing(player, session.entityId, true)
+        session.currentName = label
+        session.x = x; session.y = y; session.z = z
+        session.flight = null
+        session.speedPerTick = 0.0
+        session.pausedForDistance = false
+        session.anchorValid = false
+        session.pathRetryTicks = 0
+        if (session.phase == Phase.FOLLOWING) return
+        if (session.phase == Phase.WAITING && session.waypointProgress?.messageSent == true) {
+            // メッセージ送信後の無条件待機は移動後も中断しません。
+            session.relocatedDuringMessageWait = true
+            return
+        }
+        session.waypointProgress = null
+        session.phase = Phase.RETURNING
+        session.flight = planFlight(session, target)
     }
 
     /** 次の案内地点までの直線距離と、プレイヤーの正面を基準にした方位を表示します。 */
@@ -485,6 +532,13 @@ class GuideSessionService(
     private fun tickWaiting(session: GuideSession) {
         val point = session.route.points[session.nextIndex]
         val viewer = session.player.location
+        if (session.relocatedDuringMessageWait) {
+            val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z,
+                viewer.x, session.player.eyeLocation.y, viewer.z)
+            renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, yaw, pitch)
+            if (session.waypointProgress?.tick(false) == GuideWaypointProgress.Event.ADVANCE) advanceWaypoint(session)
+            return
+        }
         // 距離にかかわらず案内対象を向きます。
         val (yaw, pitch) = GuideCourseMath.lookAngles(
             point.x, point.y + ALLAY_HEIGHT / 2.0, point.z,
@@ -660,10 +714,10 @@ class GuideSessionService(
         val loc = session.player.location
         // 頻繁な位置更新で探索が毎 tick 走らないよう、再計画の頻度を制限します。
         if (session.anchorValid && session.followTicks % 10 != 1) return
-        if (!session.anchorValid && session.followTicks % 100 != 1) return
+        if (!session.anchorValid && session.followTicks % 20 != 1) return
         if (!loc.x.isNaN() &&
             GuideCourseMath.distanceSq(loc.x, loc.y, loc.z, session.anchorPlayerX, session.anchorPlayerY, session.anchorPlayerZ) <= ANCHOR_REFRESH_MOVE_SQ &&
-            session.anchorValid && (session.flight != null || session.followTicks % 100 != 0)
+            session.anchorValid && (session.flight?.finished == false || session.followTicks % 100 != 1)
         ) return
         session.anchorPlayerX = loc.x
         session.anchorPlayerY = loc.y
@@ -709,7 +763,8 @@ class GuideSessionService(
         }
         session.offCourseTicks++
         val graceTicks = (settings.offCourseGraceSeconds * TICKS_PER_SECOND).toInt()
-        if (session.phase == Phase.WAITING && session.offCourseTicks >= graceTicks) {
+        // 飛行・帰還中に経路探索が失敗しても、逸脱中なら追従へ移れるようにします。
+        if (session.phase != Phase.FOLLOWING && session.offCourseTicks >= graceTicks) {
             session.phase = Phase.FOLLOWING
             session.pathRetryTicks = 0
             // 追従開始時には滞在が中断されるため、帰還後は計測し直します。
@@ -743,6 +798,8 @@ class GuideSessionService(
      */
     private fun canOccupyAllay(world: World, x: Double, y: Double, z: Double): Boolean =
         GuideCourseMath.canOccupy(x, y, z, ALLAY_HALF_WIDTH, ALLAY_HEIGHT) { bx, by, bz, minX, minY, minZ, maxX, maxY, maxZ ->
+            // 候補確認のために新しいチャンクを同期読み込みしません。
+            if (!world.isChunkLoaded(bx shr 4, bz shr 4)) return@canOccupy true
             val block = world.getBlockAt(bx, by, bz)
             block.collisionShape.boundingBoxes.any { box ->
                 box.overlaps(
