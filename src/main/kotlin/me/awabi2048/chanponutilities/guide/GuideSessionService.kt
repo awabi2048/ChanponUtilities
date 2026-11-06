@@ -285,21 +285,22 @@ class GuideSessionService(
         val end = Triple(target.x, target.y, target.z)
         if (midpoint == null || session.phase != Phase.FLYING) return findPath(session, start, end)
         val via = Triple(midpoint.x, midpoint.y, midpoint.z)
-        val first = findPath(session, start, via) ?: return null
-        val second = findPath(session, via, end) ?: return null
-        val knots = first.points + second.points.drop(1)
+        val first = findRawPath(session, start, via) ?: return null
+        val second = findRawPath(session, via, end) ?: return null
+        val knots = first + second.drop(1)
         return GuideSmoothPath.build(knots) { x, y, z -> canOccupyPath(session.player.world, x, y, z) }?.let(GuideCourseMath.FlightPath::of)
     }
 
     private fun planFlightTo(session: GuideSession, tx: Double, ty: Double, tz: Double): GuideCourseMath.FlightPath? =
         findPath(session, Triple(session.x, session.y, session.z), Triple(tx, ty, tz))
 
-    private fun findPath(session: GuideSession, from: Triple<Double, Double, Double>, to: Triple<Double, Double, Double>): GuideCourseMath.FlightPath? {
-        val world = session.player.world
-        val points = GuidePathfinder.find(from, to) { x, y, z -> canOccupyPath(world, x, y, z) } ?: return null
-        return GuideCourseMath.FlightPath.of(points)
-    }
+    private fun findRawPath(session: GuideSession, from: Triple<Double, Double, Double>, to: Triple<Double, Double, Double>): List<Triple<Double, Double, Double>>? =
+        GuidePathfinder.find(from, to) { x, y, z -> canOccupyPath(session.player.world, x, y, z) }
 
+    private fun findPath(session: GuideSession, from: Triple<Double, Double, Double>, to: Triple<Double, Double, Double>): GuideCourseMath.FlightPath? {
+        val knots = findRawPath(session, from, to) ?: return null
+        return GuideSmoothPath.build(knots) { x, y, z -> canOccupyPath(session.player.world, x, y, z) }?.let(GuideCourseMath.FlightPath::of)
+    }
     /** 未読込チャンクを避け、標本の間隔を考慮して当たり判定を保守的に広げます。 */
     private fun canOccupyPath(world: World, x: Double, y: Double, z: Double): Boolean =
         GuideCourseMath.canOccupy(x, y, z, ALLAY_HALF_WIDTH + 0.1, ALLAY_HEIGHT + 0.1) { bx, by, bz, minX, minY, minZ, maxX, maxY, maxZ ->
