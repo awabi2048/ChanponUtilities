@@ -361,6 +361,7 @@ class GuideSessionService(
         val shouldWait = session.distanceWait.tick(session.phase == Phase.FLYING && onCourse,
             GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z))
         if (shouldWait) {
+            val justStarted = !session.pausedForDistance
             session.pausedForDistance = true
             session.speedPerTick = 0.0
             val viewer = player.eyeLocation
@@ -369,6 +370,8 @@ class GuideSessionService(
             renderer.moveTo(player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
             updateGlow(session)
             updateName(session)
+            // 切替時だけ、実際に頭上に表示された文面をそのまま送ります。
+            if (justStarted) session.currentName?.let(player::sendMessage)
             checkOffCourse(session)
             showParticles(session)
             return
