@@ -27,12 +27,6 @@ class GuideCourseMathTest {
         assertEquals("↑", GuideCourseMath.relativeArrow(90f, -5.0, 0.0))
         assertEquals("←", GuideCourseMath.relativeArrow(90f, 0.0, 5.0))
     }
-    @Test fun `on-course distance pause starts at twelve blocks and resumes below it`() {
-        assertFalse(GuideCourseMath.shouldPauseForDistance(true, 143.99))
-        assertTrue(GuideCourseMath.shouldPauseForDistance(true, 144.0))
-        assertFalse(GuideCourseMath.shouldPauseForDistance(false, 225.0))
-    }
-
     private fun point(x: Double, y: Double, z: Double) =
         GuidePoint(x, y, z, 0f, 0f, emptyList())
 

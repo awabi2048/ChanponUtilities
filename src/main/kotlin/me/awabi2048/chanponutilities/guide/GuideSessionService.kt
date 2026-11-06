@@ -98,6 +98,7 @@ class GuideSessionService(
         var movementNoisePhase: Double = 0.0,
         var pathRetryTicks: Int = 0,
         var waypointProgress: GuideWaypointProgress? = null,
+        val distanceWait: GuideDistanceWait = GuideDistanceWait(),
         var relocatedDuringMessageWait: Boolean = false,
         var lastTeleportAttempt: Long = -20,
         var pausedForDistance: Boolean = false,
@@ -359,9 +360,9 @@ class GuideSessionService(
         // 経路内で置いていかれた場合は進捗を保持して待ちます。
         val location = player.location
         val onCourse = session.coursePath?.let { GuideCourseMath.isNearPath(location.x, location.y, location.z, it.points, settings.courseRadius) } == true
-        val tooFar = session.phase == Phase.FLYING && GuideCourseMath.shouldPauseForDistance(onCourse,
+        val shouldWait = session.distanceWait.tick(session.phase == Phase.FLYING && onCourse,
             GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z))
-        if (tooFar) {
+        if (shouldWait) {
             session.pausedForDistance = true
             session.speedPerTick = 0.0
             val viewer = player.eyeLocation
@@ -428,6 +429,7 @@ class GuideSessionService(
         session.flight = null
         session.speedPerTick = 0.0
         session.pausedForDistance = false
+        session.distanceWait.reset()
         session.anchorValid = false
         session.pathRetryTicks = 0
         if (session.phase == Phase.FOLLOWING) return

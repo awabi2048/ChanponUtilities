@@ -45,9 +45,6 @@ object GuideCourseMath {
         return sqrt(cx * cx + cy * cy + cz * cz)
     }
 
-    /** コース内では12ブロック以上離れた場合にその場で待ちます。 */
-    fun shouldPauseForDistance(onCourse: Boolean, distanceSquared: Double): Boolean = onCourse && distanceSquared >= 144.0
-
     /** 全状態で32ブロック以上離れたアレイをプレイヤー付近へ再配置します。 */
     fun shouldTeleport(distanceSquared: Double): Boolean = distanceSquared >= 32.0 * 32.0
 
