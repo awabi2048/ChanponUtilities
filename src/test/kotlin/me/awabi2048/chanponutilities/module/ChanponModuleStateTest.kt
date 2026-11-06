@@ -10,7 +10,7 @@ class ChanponModuleStateTest {
     @Test
     fun `all modules have stable ids and config paths`() {
         assertEquals(
-            listOf("freecam", "lectern_bookshelf_link", "tour_safety", "player_state", "command_safeguard", "guide_array"),
+            listOf("freecam", "lectern_bookshelf_link", "tour_safety", "player_state", "command_safeguard", "guide_array", "tour_mode"),
             ChanponModule.all.map(ChanponModule::id),
         )
         assertEquals(
@@ -21,6 +21,7 @@ class ChanponModuleStateTest {
                 "features.player_state.enabled",
                 "features.command_safeguard.enabled",
                 "features.guide_array.enabled",
+                "features.tour_mode.enabled",
             ),
             ChanponModule.all.map(ChanponModule::enabledConfigPath),
         )
@@ -55,6 +56,7 @@ class ChanponModuleStateTest {
                 ChanponModule.PLAYER_STATE,
                 ChanponModule.COMMAND_SAFEGUARD,
                 ChanponModule.GUIDE_ARRAY,
+                ChanponModule.TOUR_MODE,
             ),
             changed.enabledModules(),
         )

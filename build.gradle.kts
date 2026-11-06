@@ -30,7 +30,7 @@ kotlin {
 val providedDeps = listOf(
     "io.papermc.paper:paper-api:26.2.build.129-stable",
     "com.awabi2048:CC-System:26.1106.1",
-    "awabi2048:my-world-manager:26.911.1",
+    "awabi2048:my-world-manager:26.1022.2",
     "maven.modrinth:GOHbQGyX:nZM8fxpG",
     "net.dmulloy2:ProtocolLib:5.4.0",
 )
@@ -59,6 +59,8 @@ tasks.processResources {
 }
 
 tasks.shadowJar {
+    // Kotlinメタデータを変換器へ渡してから重複を処理します。
+    duplicatesStrategy = DuplicatesStrategy.WARN
     archiveBaseName.set("Chanpon-Utilities")
     archiveClassifier.set("")
 }
