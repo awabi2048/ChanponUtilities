@@ -7,6 +7,7 @@ import org.bukkit.Material
 import org.bukkit.block.BlockState
 import org.bukkit.block.DoubleChest
 import org.bukkit.entity.Entity
+import org.bukkit.entity.AbstractArrow
 import org.bukkit.entity.Player
 import org.bukkit.entity.Projectile
 import org.bukkit.event.Event
@@ -15,6 +16,7 @@ import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.entity.ProjectileHitEvent
 import org.bukkit.event.hanging.HangingBreakByEntityEvent
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryDragEvent
@@ -74,6 +76,17 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
         if (bypass(event.player)) return
         event.isCancelled = true
         plugin.server.pluginManager.callEvent(TourEntityClickEvent(event.player, event.rightClicked, event.hand))
+    }
+
+    /** 着地した矢とトライデントを残さず、飛行中の挙動や命中時の処理は維持します。 */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    fun projectileHit(event: ProjectileHitEvent) {
+        val projectile = event.entity as? AbstractArrow ?: return
+        if (event.hitBlock == null) return
+        val player = projectile.shooter as? Player ?: return
+        if (bypass(player)) return
+        // 命中イベントの処理が終わってから除去し、ブロック側の命中処理を妨げません。
+        plugin.server.scheduler.runTask(plugin, Runnable { projectile.remove() })
     }
 
     /**
