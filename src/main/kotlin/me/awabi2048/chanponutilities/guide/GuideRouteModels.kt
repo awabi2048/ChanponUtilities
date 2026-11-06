@@ -5,7 +5,7 @@ import org.bukkit.configuration.ConfigurationSection
 /**
  * ガイドアレイの中継点です。
  *
- * 座標はアレイの待機位置（足元）であり、yaw/pitch は待機中にアレイが向く方角です。
+ * 座標はアレイの待機位置（足元）であり、yaw/pitch は出現演出時の向きです。
  * message はその中継点を完了したときにプレイヤーへ送信する生テキスト行です
  * （`&` カラーコード可、空なら完了時にメッセージを送りません）。
  */
@@ -33,7 +33,7 @@ data class GuideAutoStartArea(
 /**
  * 中継点の列と表示名を持つガイドルートです。
  *
- * 先頭の中継点はクリックで完了し、以降は範囲内での滞在により進行します。
+ * 各中継点は範囲内での滞在により進行します。
  */
 data class GuideRoute(
     val id: String,

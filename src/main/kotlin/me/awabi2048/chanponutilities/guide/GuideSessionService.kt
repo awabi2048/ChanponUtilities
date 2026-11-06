@@ -18,14 +18,8 @@ import kotlin.math.sqrt
 
 /**
  * ガイドアレイのセッション管理です。
- *
- * 1プレイヤーにつき1つの仮想アレイを描画し、中継点の待機・クリックによる
- * 完了・コース逸脱時の追従案内を状態機械として処理します。
- * すべてメインスレッド上で動作します。
- *
- * ガイド開始時は1点目でアレイが待機し、プレイヤーのクリックで1点目が
- * 完了して案内が始まります。逸脱中はシステムチャット（長周期）と
- * アレイ頭上のテキスト表示（短周期）の二系統で案内します。
+ * 1人ごとに仮想アレイを描画し、接近による進行と逸脱時の追従を管理します。
+ * すべてメインスレッドで動作します。
  */
 class GuideSessionService(
     private val plugin: JavaPlugin,
@@ -60,7 +54,7 @@ class GuideSessionService(
     private enum class Phase {
         /** 出現演出中はクリックや経路判定を受け付けません。 */
         APPEARING,
-        /** 中継点で待機しており、クリックを受け付ける状態です。 */
+        /** 中継点でプレイヤーの滞在を待つ状態です。 */
         WAITING,
 
         /** 完了直後に次の中継点へ飛行中です。 */
@@ -83,7 +77,7 @@ class GuideSessionService(
         var z: Double,
         var phase: Phase,
         var offCourseTicks: Int = 0,
-        var lastClickPromptAtMillis: Long = 0L,
+
         var bobPhase: Double = 0.0,
         var flight: GuideCourseMath.FlightPath? = null,
         var coursePath: GuideCourseMath.FlightPath? = null,
@@ -139,9 +133,7 @@ class GuideSessionService(
      * ガイドを開始します。すでにガイド中なら現在のセッションを破棄して
      * 新しいルートで開始します。
      *
-     * アレイは1点目へ出現して待機し、プレイヤーがクリックすると1点目が
-     * 完了して2点目への案内が始まります。1点のみのルートはそのクリックで
-     * 完了となります。
+     * アレイは1点目に出現し、各地点での滞在を確認して進行します。
      */
     fun startGuide(player: Player, route: GuideRoute): Boolean {
         val hadSession = sessions.containsKey(player.uniqueId)
@@ -201,7 +193,7 @@ class GuideSessionService(
         sessions.remove(player.uniqueId)?.let { if (!it.ended) beginDeparture(it) }
     }
 
-    /** 通常終了・中断・置換時は最後の表示姿勢を保持して10 tick消滅演出を行います。 */
+    /** 通常終了・中断・置換時は最後の表示姿勢を保持して20 tick消滅演出を行います。 */
     private fun beginDeparture(session: GuideSession) {
         session.player.playSound(session.player.location, Sound.ENTITY_ALLAY_AMBIENT_WITHOUT_ITEM, 1.0f, 1.25f)
         if (session.displayEntityId != -1) {
@@ -235,11 +227,7 @@ class GuideSessionService(
         }
     }
 
-    /**
-     * UseEntity packet の受信（メインスレッド）です。
-     * アレイのクリックは中継点の待機中・一定距離内のみ受理し、追従中は
-     * 誘導メッセージの再送に留めます。
-     */
+    /** 仮想アレイへのクリックを受信し、サーバー実体へ流れないようにします。 */
     private fun handleInteract(player: Player, entityId: Int) {
         val session = sessions[player.uniqueId] ?: return
         if (session.ended || session.entityId != entityId) return
@@ -493,7 +481,7 @@ class GuideSessionService(
     }
 
     /**
-     * 待機中は単振動による浮遊だけを行い、向きは中継点に設定された yaw を維持します。
+     * 待機中は浮遊しながらプレイヤーを向きます。
      */
     private fun tickWaiting(session: GuideSession) {
         val point = session.route.points[session.nextIndex]
@@ -523,7 +511,7 @@ class GuideSessionService(
     }
 
     /**
-     * 計画した曲線経路に沿って飛行し、移動方向へ体と頭を向けます。
+     * 計画した曲線経路に沿って飛行し、プレイヤーを向きます。
      * FLYING は次の中継点、RETURNING はコース復帰後の中継点へ向かいます。
      */
     private fun tickFlight(session: GuideSession) {
@@ -562,8 +550,7 @@ class GuideSessionService(
 
     /**
      * 追従モードです。アレイはプレイヤーから約2ブロックの占有可能な位置へ
-     * 飛行して滞在し、静止中は次の中継点方向へ体と頭を
-     * 向けて案内します。占有可能な位置が見つからない間は現在位置を維持します。
+     * 飛行して滞在し、プレイヤーを向いて案内します。占有可能な位置が見つからない間は現在位置を維持します。
      *
      * 案内は二系統のタイマーで行います。長周期のシステムチャットと、
      * 短周期で切り替わるアレイ頭上のテキスト表示（効果音付き）です。
@@ -582,7 +569,7 @@ class GuideSessionService(
             session.movingThisTick = !flight.finished
         }
 
-        // 移動中は移動方向を、静止中は次の中継点を指し示します。
+        // 移動中も静止中もプレイヤーを向きます。
         val viewer = session.player.eyeLocation
         val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
         val bob = bobOffset(session)
@@ -773,8 +760,7 @@ if (session.displayEntityId != -1) {
         const val ALLAY_HEIGHT = GuideAllayDimensions.HEIGHT
         /** 追従アンカーの再計算を行うプレイヤー移動量の閾値（二乗）です。 */
         const val ANCHOR_REFRESH_MOVE_SQ = 0.25 * 0.25
-        /** 移動方向へ向きを変える最小移動量（二乗）です。 */
-        const val FACING_MIN_MOVE_SQ = 0.002 * 0.002
+
         /** 追従表示のテキストディスプレイを置く、足元からの高さです。 */
         const val DISPLAY_OFFSET = 1.55
     }
