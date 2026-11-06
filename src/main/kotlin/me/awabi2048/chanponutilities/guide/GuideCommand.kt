@@ -28,17 +28,22 @@ class GuideCommand(
         val player = sender as? Player
         when (args.firstOrNull()?.lowercase()) {
             "start" -> {
-                if (player == null) {
-                    sender.sendMessage(ChanponI18n.text(null, Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY))
+                val targetName = args.getOrNull(2)
+                if (targetName != null && !sender.hasPermission(ADMIN_PERMISSION)) {
+                    sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
                     return true
                 }
-                if (!player.hasPermission(PERMISSION)) {
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
+                val target = if (targetName == null) player else org.bukkit.Bukkit.getPlayerExact(targetName)
+                if (target == null) {
+                    sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY))
                     return true
                 }
-                startGuide(player, args.getOrNull(1))
-            }
-            "stop" -> {
+                if (targetName == null && !sender.hasPermission(PERMISSION)) {
+                    sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
+                    return true
+                }
+                startGuide(target, args.getOrNull(1))
+            }            "stop" -> {
                 if (player == null) {
                     sender.sendMessage(ChanponI18n.text(null, Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY))
                     return true
@@ -99,13 +104,7 @@ class GuideCommand(
             )
             return
         }
-        val replaced = sessionService.startGuide(player, route)
-        val key = if (replaced) {
-            Keys.CHANPON_UTILITIES_GUIDE_START_REPLACED
-        } else {
-            Keys.CHANPON_UTILITIES_GUIDE_STARTED
-        }
-        player.sendMessage(ChanponI18n.text(player, key, "route" to route.label))
+        sessionService.startGuide(player, route)
     }
 
     private fun admin(sender: CommandSender, args: List<String>) {

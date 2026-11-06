@@ -79,7 +79,7 @@ class GuideListener(
 
     private fun startSelectedRoute(player: Player, route: GuideRoute) {
         sessionService.startGuide(player, route)
-        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STARTED, "route" to route.label))
+
     }
 
     @EventHandler
@@ -90,9 +90,7 @@ class GuideListener(
 
     @EventHandler
     fun onWorldChange(event: PlayerChangedWorldEvent) {
-        if (sessionService.onWorldLeft(event.player)) {
-            event.player.sendMessage(ChanponI18n.text(event.player, Keys.CHANPON_UTILITIES_GUIDE_WORLD_LEFT))
-        }
+        sessionService.onWorldLeft(event.player)
         val current = position(event.player.location) ?: return
         poller.record(event.player.uniqueId, current)
         tryAutoStart(event.player, null, current)
