@@ -12,6 +12,16 @@ import kotlin.math.sqrt
  */
 object GuideCourseMath {
 
+    /** 水平方向をプレイヤーの正面・右方向に投影し、相対方位を8方向の矢印で返します。 */
+    fun relativeArrow(yaw: Float, dx: Double, dz: Double): String {
+        if (dx * dx + dz * dz < 1.0e-12) return "↑"
+        val radians = Math.toRadians(yaw.toDouble())
+        val forward = -kotlin.math.sin(radians) * dx + kotlin.math.cos(radians) * dz
+        val right = kotlin.math.cos(radians) * dx + kotlin.math.sin(radians) * dz
+        val sector = kotlin.math.floor((atan2(right, forward) + Math.PI / 8.0) / (Math.PI / 4.0)).toInt()
+        return listOf("↑", "↗", "→", "↘", "↓", "↙", "←", "↖")[Math.floorMod(sector, 8)]
+    }
+
     /**
      * 点 p から線分 ab への最短距離です。
      * 「現在区間を中心とする円筒（3D カプセル）」の内外判定に使います。

@@ -7,6 +7,14 @@ import org.junit.jupiter.api.Test
 import kotlin.math.abs
 
 class GuideCourseMathTest {
+    @Test fun `arrows describe the destination relative to player yaw`() {
+        assertEquals("↑", GuideCourseMath.relativeArrow(0f, 0.0, 5.0))
+        assertEquals("→", GuideCourseMath.relativeArrow(0f, 5.0, 0.0))
+        assertEquals("↓", GuideCourseMath.relativeArrow(0f, 0.0, -5.0))
+        assertEquals("↖", GuideCourseMath.relativeArrow(0f, -5.0, 5.0))
+        assertEquals("↑", GuideCourseMath.relativeArrow(90f, -5.0, 0.0))
+        assertEquals("→", GuideCourseMath.relativeArrow(90f, 0.0, 5.0))
+    }
     @Test fun `on-course distance pause starts at twelve blocks and resumes below it`() {
         assertFalse(GuideCourseMath.shouldPauseForDistance(true, 143.99))
         assertTrue(GuideCourseMath.shouldPauseForDistance(true, 144.0))

@@ -338,6 +338,7 @@ class GuideSessionService(
         val player = session.player
         if (player.world.name != session.route.worldName) return
         session.elapsedTicks++
+        if (session.elapsedTicks % 10L == 1L) showActionBar(session)
 
         session.movingThisTick = false
         if (session.phase == Phase.APPEARING) {
@@ -377,6 +378,19 @@ class GuideSessionService(
         updateName(session)
         showParticles(session)
         if (settings.debug && session.particleTicks % 10 == 0) showDebug(session)
+    }
+
+    /** 次の案内地点までの直線距離と、プレイヤーの正面を基準にした方位を表示します。 */
+    private fun showActionBar(session: GuideSession) {
+        val location = session.player.location
+        val target = session.route.points[session.nextIndex]
+        val dx = target.x - location.x
+        val dy = target.y - location.y
+        val dz = target.z - location.z
+        val distance = kotlin.math.round(kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)).toInt()
+        val text = ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ACTION_BAR,
+            "arrow" to GuideCourseMath.relativeArrow(location.yaw, dx, dz), "distance" to distance)
+        session.player.sendActionBar(LegacyComponentSerializer.legacySection().deserialize(text))
     }
 
     /** 実際の判定で使う折れ線と、その周囲の断面を可視化します。 */
