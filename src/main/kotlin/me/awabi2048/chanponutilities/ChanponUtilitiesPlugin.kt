@@ -248,6 +248,10 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                             // 新規導入時は観光期間を自動開始しません。
                             if (!config.contains("features.tour_mode.enabled")) config.set("features.tour_mode.enabled", false)
                         },
+                        15 to ConfigMigration { config ->
+                            // 行ごとの待機は文字数から決めるため、旧固定秒数を削除します。
+                            config.set("features.guide_array.message_wait_seconds_per_line", null)
+                        },
                     ),
                     validator = ConfigValidator(::validateConfigValues),
                     reloadAction = { restartPluginLifecycle("config reload") },
@@ -325,7 +329,6 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
                     waypointRadius = config.getDouble("features.guide_array.waypoint_radius", 6.0),
                     waypointVerticalRadius = config.getDouble("features.guide_array.waypoint_vertical_radius", 6.0),
                     waypointDwellSeconds = config.getDouble("features.guide_array.waypoint_dwell_seconds", 2.0),
-                    messageWaitSecondsPerLine = config.getDouble("features.guide_array.message_wait_seconds_per_line", 5.0),
                     courseRadius = config.getDouble("features.guide_array.course_radius", 4.0),
                     offCourseGraceSeconds = config.getDouble("features.guide_array.off_course_grace_seconds", 5.0),
                     offCourseChatIntervalSeconds = config.getDouble("features.guide_array.off_course_chat_interval_seconds", 15.0),
@@ -482,7 +485,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         }
         // ガイドアレイの動作パラメータは正の有限数であることを要求します。
         // 有限値を要求し、NaN や無限大によるタイマーの破綻を防ぎます。
-        for ((key, minimum) in listOf("waypoint_radius" to 0.0, "waypoint_vertical_radius" to 0.0, "waypoint_dwell_seconds" to 2.0, "message_wait_seconds_per_line" to 0.0)) {
+        for ((key, minimum) in listOf("waypoint_radius" to 0.0, "waypoint_vertical_radius" to 0.0, "waypoint_dwell_seconds" to 2.0)) {
             val value = config.get("features.guide_array.$key") as? Number
             require(value != null && value.toDouble().isFinite() && value.toDouble() >= minimum && (key != "waypoint_radius" || value.toDouble() > 0.0)) {
                 "features.guide_array.$key は有効な数値で指定してください"
@@ -583,7 +586,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private companion object {
         const val CONFIG_OWNER = "chanpon-utilities"
-        const val CONFIG_VERSION = 15
+        const val CONFIG_VERSION = 16
         const val COMMAND_SAFEGUARD_BLACKLIST_PATH = "command_safeguard.blacklist"
         val DEFAULT_COMMAND_SAFEGUARD_BLACKLIST = listOf("/kill @e[]", "/kill @e")
     }

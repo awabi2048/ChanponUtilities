@@ -41,7 +41,6 @@ class GuideSessionService(
         val waypointRadius: Double,
         val waypointVerticalRadius: Double,
         val waypointDwellSeconds: Double,
-        val messageWaitSecondsPerLine: Double,
         val courseRadius: Double,
         val offCourseGraceSeconds: Double,
         val offCourseChatIntervalSeconds: Double,
@@ -244,9 +243,8 @@ class GuideSessionService(
         }
     }
 
-    private fun sendWaypointMessage(session: GuideSession) {
+    private fun playWaypointCue(session: GuideSession) {
         val player = session.player
-        session.route.points[session.nextIndex].message.forEach { player.sendMessage(ChanponI18n.colorize(it)) }
         // 中継完了時の演出は案内対象者にのみ表示します。
         player.spawnParticle(Particle.TOTEM_OF_UNDYING, session.x, session.y, session.z, 20, 2.0, 2.0, 2.0, 0.2)
         player.playSound(player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 0.98f)
@@ -552,7 +550,7 @@ class GuideSessionService(
             val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z,
                 viewer.x, session.player.eyeLocation.y, viewer.z)
             renderer.moveTo(session.player, session.entityId, session.x, session.y + bobOffset(session), session.z, yaw, pitch)
-            if (session.waypointProgress?.tick(false) == GuideWaypointProgress.Event.ADVANCE) advanceWaypoint(session)
+            session.waypointProgress?.let { processWaypointProgress(session, it, false) }
             return
         }
         // 距離にかかわらず案内対象を向きます。
@@ -566,17 +564,21 @@ class GuideSessionService(
         session.z = point.z
         val progress = session.waypointProgress ?: GuideWaypointProgress(
             kotlin.math.ceil(settings.waypointDwellSeconds * TICKS_PER_SECOND).toLong(),
-            kotlin.math.ceil(settings.messageWaitSecondsPerLine * point.message.size * TICKS_PER_SECOND).toLong(),
+            point.message,
         ).also { session.waypointProgress = it }
         val loc = session.player.location
         val inRange = GuideWaypointProgress.contains(loc.x, loc.y, loc.z, point.x, point.y, point.z,
             settings.waypointRadius, settings.waypointVerticalRadius)
-        when (progress.tick(inRange)) {
-            GuideWaypointProgress.Event.NONE -> Unit
-            GuideWaypointProgress.Event.MESSAGE -> sendWaypointMessage(session)
-            GuideWaypointProgress.Event.MESSAGE_AND_ADVANCE -> { sendWaypointMessage(session); advanceWaypoint(session) }
-            GuideWaypointProgress.Event.ADVANCE -> advanceWaypoint(session)
-        }
+        processWaypointProgress(session, progress, inRange)
+    }
+
+    /** 滞在達成の演出は一度だけ行い、行送りは範囲外へ出ても続けます。 */
+    private fun processWaypointProgress(session: GuideSession, progress: GuideWaypointProgress, inRange: Boolean) {
+        val event = progress.tick(inRange)
+        if (event.started) playWaypointCue(session)
+        val messages = session.route.points[session.nextIndex].message
+        event.lineIndices.forEach { session.player.sendMessage(ChanponI18n.colorize(messages[it])) }
+        if (event.advance) advanceWaypoint(session)
     }
 
     /**
