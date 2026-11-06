@@ -33,6 +33,7 @@ import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
 import me.awabi2048.chanponutilities.tour.TourModeListener
 import me.awabi2048.chanponutilities.tour.TourModeWorlds
 import me.awabi2048.chanponutilities.tour.TourInteractionListener
+import me.awabi2048.chanponutilities.tour.TourWorldGuardListener
 import me.awabi2048.chanponutilities.tour.isTourAdmin
 import org.bukkit.Bukkit
 import org.bukkit.configuration.file.YamlConfiguration
@@ -362,6 +363,9 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             val tour = TourModeListener(this)
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
+            if (server.pluginManager.isPluginEnabled("WorldGuard")) {
+                server.pluginManager.registerEvents(TourWorldGuardListener(), this)
+            }
             // 有効化コマンドの完了を待たず、接続中の利用者へ現在の状態を適用します。
             server.onlinePlayers.forEach(tour::sync)
             // 他の同期と同じtickに飛行設定を更新された場合でも、次tickに合わせて整合し直します。
