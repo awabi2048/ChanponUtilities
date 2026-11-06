@@ -51,6 +51,13 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun interact(event: PlayerInteractEvent) {
+        // ドラゴンの卵は破壊イベントを経由せず、左右クリックのどちらでも移動します。
+        if (!bypass(event.player) && event.clickedBlock?.type == Material.DRAGON_EGG &&
+            event.action in setOf(Action.LEFT_CLICK_BLOCK, Action.RIGHT_CLICK_BLOCK)
+        ) {
+            event.setUseInteractedBlock(Event.Result.DENY)
+            return
+        }
         if (event.action == Action.PHYSICAL && !bypass(event.player)) {
             // 亀の卵の踏みつけと耕地の踏み荒らしは、建築権限や破壊イベントを経由しません。
             if (event.clickedBlock?.type in setOf(Material.TURTLE_EGG, Material.FARMLAND)) {
