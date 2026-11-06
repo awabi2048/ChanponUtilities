@@ -432,11 +432,12 @@ class GuideSessionService(
             player.spawnParticle(Particle.ENCHANTED_HIT, x, y, z, 1, 0.0, 0.0, 0.0, 0.0)
             player.spawnParticle(Particle.DUST_COLOR_TRANSITION, x, y, z, 1, 0.0, 0.0, 0.0, 0.0, Particle.DustTransition(org.bukkit.Color.fromRGB(128, 255, 230), org.bukkit.Color.WHITE, 0.75f))
         }
-        if (++session.particleTicks % 100 != 0) return
-        // 次の目的地の上下に粒子を散らし、遠くからでも方向を見つけられるようにします。
+        session.particleTicks++
         val point = session.route.points[session.nextIndex]
-        player.spawnParticle(Particle.END_ROD, point.x, point.y, point.z, 100, 0.3, 30.0, 0.3, 0.0)
-        if (session.phase == Phase.FOLLOWING) showReturnLine(session, point)
+        // ビーコンと帰還線は別々の周期で表示します。
+        if (session.particleTicks % 60 == 0)
+            player.spawnParticle(Particle.END_ROD, point.x, point.y, point.z, 150, 0.3, 30.0, 0.3, 0.0)
+        if (session.particleTicks % 100 == 0 && session.phase == Phase.FOLLOWING) showReturnLine(session, point)
     }
 
     /** 逸脱中はプレイヤーから次の目的地へ向かう流れを表示します。 */

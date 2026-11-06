@@ -17,7 +17,7 @@ object GuideCourseMath {
         if (dx * dx + dz * dz < 1.0e-12) return "↑"
         val radians = Math.toRadians(yaw.toDouble())
         val forward = -kotlin.math.sin(radians) * dx + kotlin.math.cos(radians) * dz
-        val right = kotlin.math.cos(radians) * dx + kotlin.math.sin(radians) * dz
+        val right = -kotlin.math.cos(radians) * dx - kotlin.math.sin(radians) * dz
         val sector = kotlin.math.floor((atan2(right, forward) + Math.PI / 8.0) / (Math.PI / 4.0)).toInt()
         return listOf("↑", "↗", "→", "↘", "↓", "↙", "←", "↖")[Math.floorMod(sector, 8)]
     }
