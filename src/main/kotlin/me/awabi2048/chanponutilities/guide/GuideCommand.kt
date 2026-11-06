@@ -28,17 +28,22 @@ class GuideCommand(
         val player = sender as? Player
         when (args.firstOrNull()?.lowercase()) {
             "start" -> {
-                if (player == null) {
-                    sender.sendMessage(ChanponI18n.text(null, Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY))
+                val targetName = args.getOrNull(2)
+                if (targetName != null && !sender.hasPermission(ADMIN_PERMISSION)) {
+                    sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
                     return true
                 }
-                if (!player.hasPermission(PERMISSION)) {
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
+                val target = if (targetName == null) player else org.bukkit.Bukkit.getPlayerExact(targetName)
+                if (target == null) {
+                    sender.sendMessage(ChanponI18n.text(player, if (targetName == null) Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY else Keys.CHANPON_UTILITIES_GUIDE_TARGET_UNAVAILABLE))
                     return true
                 }
-                startGuide(player, args.getOrNull(1))
-            }
-            "stop" -> {
+                if (targetName == null && !sender.hasPermission(PERMISSION)) {
+                    sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
+                    return true
+                }
+                startGuide(sender, target, args.getOrNull(1))
+            }            "stop" -> {
                 if (player == null) {
                     sender.sendMessage(ChanponI18n.text(null, Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY))
                     return true
@@ -78,34 +83,32 @@ class GuideCommand(
         return true
     }
 
-    private fun startGuide(player: Player, routeId: String?) {
+    private fun startGuide(sender: CommandSender, player: Player, routeId: String?) {
         if (routeId == null) {
             when (routeStore.all().size) {
                 0 -> {
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_NO_ROUTES))
+                    sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_NO_ROUTES))
                     return
                 }
                 1 -> Unit
                 else -> {
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_USAGE))
+                    sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_USAGE))
                     return
                 }
             }
         }
         val route = if (routeId != null) routeStore.find(routeId) else routeStore.all().single()
         if (route == null) {
-            player.sendMessage(
-                ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ROUTE_NOT_FOUND, "route" to routeId)
+            sender.sendMessage(
+                ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_ROUTE_NOT_FOUND, "route" to routeId)
             )
             return
         }
-        val replaced = sessionService.startGuide(player, route)
-        val key = if (replaced) {
-            Keys.CHANPON_UTILITIES_GUIDE_START_REPLACED
-        } else {
-            Keys.CHANPON_UTILITIES_GUIDE_STARTED
+        if (player.world.name != route.worldName) {
+            sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_WRONG_WORLD))
+            return
         }
-        player.sendMessage(ChanponI18n.text(player, key, "route" to route.label))
+        sessionService.startGuide(player, route)
     }
 
     private fun admin(sender: CommandSender, args: List<String>) {
@@ -183,6 +186,22 @@ class GuideCommand(
                     }
                 }
             }
+            "resetauto" -> {
+                val route = args.getOrNull(1)
+                val name = args.getOrNull(2)
+                if (route == null || name == null) {
+                    sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_RESET_AUTO_USAGE))
+                    return
+                }
+                val id = runCatching { java.util.UUID.fromString(name) }.getOrNull()
+                    ?: org.bukkit.Bukkit.getOfflinePlayerIfCached(name)?.uniqueId
+                if (routeStore.find(route) == null || id == null) {
+                    sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_RESET_AUTO_INVALID))
+                    return
+                }
+                routeStore.autoStartHistory.clear(id, route)
+                sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_RESET_AUTO_DONE))
+            }
             "reload" -> {
                 when (val result = routeStore.reload()) {
                     is GuideRouteStore.LoadResult.Loaded -> sender.sendMessage(
@@ -212,17 +231,26 @@ class GuideCommand(
             2 -> when (args[0].lowercase()) {
                 "start" -> routeStore.all().map(GuideRoute::id).filter { it.startsWith(args[1], ignoreCase = true) }
                 "admin" -> if (sender.hasPermission(ADMIN_PERMISSION)) {
-                    listOf("setpoint", "reload").filter { it.startsWith(args[1], ignoreCase = true) }
+                    listOf("setpoint", "reload", "resetauto").filter { it.startsWith(args[1], ignoreCase = true) }
                 } else emptyList()
                 else -> emptyList()
             }
-            3 -> if (args[0].equals("admin", true) && args[1].equals("setpoint", true) && sender.hasPermission(ADMIN_PERMISSION)) {
-                routeStore.all().map(GuideRoute::id).filter { it.startsWith(args[2], ignoreCase = true) }
-            } else emptyList()
-            4 -> if (args[0].equals("admin", true) && args[1].equals("setpoint", true) && sender.hasPermission(ADMIN_PERMISSION)) {
-                val size = routeStore.find(args[2])?.points?.size ?: 0
-                (1..size + 1).map(Int::toString).filter { it.startsWith(args[3]) }
-            } else emptyList()
+            3 -> when {
+                args[0].equals("start", true) && sender.hasPermission(ADMIN_PERMISSION) ->
+                    org.bukkit.Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[2], true) }
+                args[0].equals("admin", true) && args[1].lowercase() in setOf("setpoint", "resetauto") && sender.hasPermission(ADMIN_PERMISSION) ->
+                    routeStore.all().map(GuideRoute::id).filter { it.startsWith(args[2], true) }
+                else -> emptyList()
+            }
+            4 -> when {
+                args[0].equals("admin", true) && args[1].equals("setpoint", true) && sender.hasPermission(ADMIN_PERMISSION) -> {
+                    val size = routeStore.find(args[2])?.points?.size ?: 0
+                    ((1..size + 1).map(Int::toString) + (1 until size).map { "$it.5" }).filter { it.startsWith(args[3]) }
+                }
+                args[0].equals("admin", true) && args[1].equals("resetauto", true) && sender.hasPermission(ADMIN_PERMISSION) ->
+                    org.bukkit.Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[3], true) }
+                else -> emptyList()
+            }
             else -> emptyList()
         }
     }
