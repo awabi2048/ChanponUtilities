@@ -35,6 +35,14 @@ object GuideCourseMath {
         return sqrt(cx * cx + cy * cy + cz * cz)
     }
 
+    /** 標本列を一時的なペア一覧へ複製せずに判定します。 */
+    fun isNearPath(x: Double, y: Double, z: Double, points: List<Triple<Double, Double, Double>>, radius: Double): Boolean {
+        for (i in 1 until points.size) {
+            val a = points[i - 1]; val b = points[i]
+            if (distanceToSegment(x, y, z, a.first, a.second, a.third, b.first, b.second, b.third) <= radius) return true
+        }
+        return false
+    }
     /** 現在区間のカプセル領域内にプレイヤーがいるかを返します。 */
     fun isOnCourse(
         px: Double, py: Double, pz: Double,

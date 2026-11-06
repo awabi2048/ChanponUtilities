@@ -363,10 +363,7 @@ class GuideSessionService(
         }
         // 経路内で置いていかれた場合は進捗を保持して待ちます。
         val location = player.location
-        val onCourse = session.coursePath?.points?.zipWithNext()?.any { (a, b) ->
-            GuideCourseMath.distanceToSegment(location.x, location.y, location.z,
-                a.first, a.second, a.third, b.first, b.second, b.third) <= settings.courseRadius
-        } == true
+        val onCourse = session.coursePath?.let { GuideCourseMath.isNearPath(location.x, location.y, location.z, it.points, settings.courseRadius) } == true
         val tooFar = session.phase == Phase.FLYING && onCourse &&
             GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z) >= 64.0
         if (tooFar) {
@@ -703,10 +700,7 @@ class GuideSessionService(
         val loc = player.location
         val points = session.coursePath?.points ?: listOf(
             Triple(prev.x, prev.y, prev.z), Triple(next.x, next.y, next.z))
-        val onCourse = points.zipWithNext().any { (a, b) ->
-            GuideCourseMath.distanceToSegment(loc.x, loc.y, loc.z,
-                a.first, a.second, a.third, b.first, b.second, b.third) <= settings.courseRadius
-        }
+        val onCourse = GuideCourseMath.isNearPath(loc.x, loc.y, loc.z, points, settings.courseRadius)
         if (onCourse) {
             session.offCourseTicks = 0
             if (session.phase == Phase.FOLLOWING) {
