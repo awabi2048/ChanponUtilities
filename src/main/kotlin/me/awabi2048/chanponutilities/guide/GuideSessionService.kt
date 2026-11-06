@@ -94,6 +94,7 @@ class GuideSessionService(
         var movingThisTick: Boolean = false,
         var particleTicks: Int = 0,
         val particleRadius: GuideParticleRadius = GuideParticleRadius(),
+        val particleSpacing: Array<GuideParticleSpacing> = Array(2) { GuideParticleSpacing() },
         var speedPerTick: Double = 0.0,
         var movementNoisePhase: Double = 0.0,
         var pathRetryTicks: Int = 0,
@@ -428,6 +429,7 @@ class GuideSessionService(
         if (session.glowing) renderer.setGlowing(player, session.entityId, true)
         session.currentName = label
         session.x = x; session.y = y; session.z = z
+        session.particleSpacing.forEach { it.reset() }
         session.flight = null
         session.speedPerTick = 0.0
         session.pausedForDistance = false
@@ -489,8 +491,8 @@ class GuideSessionService(
         val player = session.player
         val phase = session.particleTicks * Math.PI / 20.0
         val radiusTarget = when {
-            session.phase == Phase.WAITING && session.waypointProgress?.messageSent != true && !session.relocatedDuringMessageWait -> settings.waypointRadius
-            session.movingThisTick -> 0.75
+            session.phase == Phase.WAITING && session.waypointProgress?.messageSent != true && !session.relocatedDuringMessageWait -> settings.waypointRadius * 0.7
+            session.movingThisTick -> 2.0
             else -> 2.0
         }
         val radius = session.particleRadius.tick(radiusTarget)
@@ -502,8 +504,12 @@ class GuideSessionService(
             val x = session.x + cos(angle) * radius
             val y = session.y - 0.1 + sin(phase * 0.5) * 0.1
             val z = session.z + sin(angle) * radius
-            player.spawnParticle(Particle.ENCHANTED_HIT, x, y, z, 1, 0.0, 0.0, 0.0, 0.0)
-            player.spawnParticle(Particle.DUST_COLOR_TRANSITION, x, y, z, 1, 0.0, 0.0, 0.0, 0.0, transition)
+            val current = Triple(x, y, z)
+            for ((px, py, pz) in session.particleSpacing[i].points(current)) {
+                player.spawnParticle(Particle.ENCHANTED_HIT, px, py, pz, 1, 0.0, 0.0, 0.0, 0.0)
+                player.spawnParticle(Particle.DUST_COLOR_TRANSITION, px, py, pz, 1, 0.0, 0.0, 0.0, 0.0, transition)
+            }
+
         }
         session.particleTicks++
         val point = session.route.points[session.nextIndex]
