@@ -35,14 +35,14 @@ class GuideCommand(
                 }
                 val target = if (targetName == null) player else org.bukkit.Bukkit.getPlayerExact(targetName)
                 if (target == null) {
-                    sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY))
+                    sender.sendMessage(ChanponI18n.text(player, if (targetName == null) Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY else Keys.CHANPON_UTILITIES_GUIDE_TARGET_UNAVAILABLE))
                     return true
                 }
                 if (targetName == null && !sender.hasPermission(PERMISSION)) {
                     sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
                     return true
                 }
-                startGuide(target, args.getOrNull(1))
+                startGuide(sender, target, args.getOrNull(1))
             }            "stop" -> {
                 if (player == null) {
                     sender.sendMessage(ChanponI18n.text(null, Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY))
@@ -83,25 +83,29 @@ class GuideCommand(
         return true
     }
 
-    private fun startGuide(player: Player, routeId: String?) {
+    private fun startGuide(sender: CommandSender, player: Player, routeId: String?) {
         if (routeId == null) {
             when (routeStore.all().size) {
                 0 -> {
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_NO_ROUTES))
+                    sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_NO_ROUTES))
                     return
                 }
                 1 -> Unit
                 else -> {
-                    player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_USAGE))
+                    sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_USAGE))
                     return
                 }
             }
         }
         val route = if (routeId != null) routeStore.find(routeId) else routeStore.all().single()
         if (route == null) {
-            player.sendMessage(
-                ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ROUTE_NOT_FOUND, "route" to routeId)
+            sender.sendMessage(
+                ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_ROUTE_NOT_FOUND, "route" to routeId)
             )
+            return
+        }
+        if (player.world.name != route.worldName) {
+            sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_WRONG_WORLD))
             return
         }
         sessionService.startGuide(player, route)

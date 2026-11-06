@@ -365,8 +365,8 @@ class GuideSessionService(
         // 経路内で置いていかれた場合は進捗を保持して待ちます。
         val location = player.location
         val onCourse = session.coursePath?.let { GuideCourseMath.isNearPath(location.x, location.y, location.z, it.points, settings.courseRadius) } == true
-        val tooFar = session.phase == Phase.FLYING && onCourse &&
-            GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z) >= 64.0
+        val tooFar = session.phase == Phase.FLYING && GuideCourseMath.shouldPauseForDistance(onCourse,
+            GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z))
         if (tooFar) {
             session.pausedForDistance = true
             session.speedPerTick = 0.0
