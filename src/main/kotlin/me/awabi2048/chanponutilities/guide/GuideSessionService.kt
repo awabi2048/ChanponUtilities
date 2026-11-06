@@ -249,7 +249,6 @@ class GuideSessionService(
         val player = session.player
         // 中継完了時の演出は案内対象者にのみ表示します。
         player.spawnParticle(Particle.TOTEM_OF_UNDYING, session.x, session.y, session.z, 20, 2.0, 2.0, 2.0, 0.2)
-        player.playSound(player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 0.98f)
         player.playSound(player.location, Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.5f)
     }
 
@@ -595,7 +594,11 @@ class GuideSessionService(
         val event = progress.tick(inRange)
         if (event.started) playWaypointCue(session)
         val messages = session.route.points[session.nextIndex].message
-        event.lineIndices.forEach { session.player.sendMessage(ChanponI18n.colorize(messages[it])) }
+        event.lineIndices.forEach {
+            session.player.sendMessage(ChanponI18n.colorize(messages[it]))
+            // 各行に対応する必須音は任意の案内音のクールタイムに左右されません。
+            session.player.playSound(session.player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 0.98f)
+        }
         if (event.advance) advanceWaypoint(session)
     }
 
@@ -698,7 +701,7 @@ class GuideSessionService(
     /** 状態ごとの文言を一つのネームタグへ集約し、変化時だけ送信します。 */
     private fun updateName(session: GuideSession) {
         val text = when {
-            session.movingThisTick -> {
+            session.movingThisTick || session.pausedForDistance -> {
                 val texts = ChanponI18n.list(session.player, Keys.CHANPON_UTILITIES_GUIDE_MOVING_DISPLAY)
                 val interval = (settings.followDisplayIntervalSeconds * TICKS_PER_SECOND).toLong().coerceAtLeast(1)
                 if (texts.isEmpty()) ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
