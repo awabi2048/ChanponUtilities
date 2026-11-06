@@ -26,6 +26,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerTakeLecternBookEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.InventoryHolder
+import org.bukkit.inventory.LecternInventory
 
 /** 観光中のプレイヤー操作だけを制限し、ホッパー等の搬送には干渉しません。 */
 internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugin) : Listener {
@@ -34,7 +35,10 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun open(event: InventoryOpenEvent) {
         val player = event.player as? Player ?: return
-        if (!bypass(player) && isWorldStorage(event.inventory)) event.isCancelled = true
+        // 書見台は画面を開いて閲覧できます。本の出し入れは専用イベント等で拒否します。
+        if (!bypass(player) && event.inventory !is LecternInventory && isWorldStorage(event.inventory)) {
+            event.isCancelled = true
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
