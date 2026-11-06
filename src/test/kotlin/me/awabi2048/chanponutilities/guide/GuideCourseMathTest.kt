@@ -7,10 +7,10 @@ import org.junit.jupiter.api.Test
 import kotlin.math.abs
 
 class GuideCourseMathTest {
-    @Test fun `on-course distance pause starts at eight blocks and resumes below it`() {
-        assertFalse(GuideCourseMath.shouldPauseForDistance(true, 63.99))
-        assertTrue(GuideCourseMath.shouldPauseForDistance(true, 64.0))
-        assertFalse(GuideCourseMath.shouldPauseForDistance(false, 100.0))
+    @Test fun `on-course distance pause starts at twelve blocks and resumes below it`() {
+        assertFalse(GuideCourseMath.shouldPauseForDistance(true, 143.99))
+        assertTrue(GuideCourseMath.shouldPauseForDistance(true, 144.0))
+        assertFalse(GuideCourseMath.shouldPauseForDistance(false, 225.0))
     }
 
     private fun point(x: Double, y: Double, z: Double) =

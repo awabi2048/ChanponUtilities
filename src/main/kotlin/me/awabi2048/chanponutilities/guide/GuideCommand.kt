@@ -235,13 +235,22 @@ class GuideCommand(
                 } else emptyList()
                 else -> emptyList()
             }
-            3 -> if (args[0].equals("admin", true) && args[1].equals("setpoint", true) && sender.hasPermission(ADMIN_PERMISSION)) {
-                routeStore.all().map(GuideRoute::id).filter { it.startsWith(args[2], ignoreCase = true) }
-            } else emptyList()
-            4 -> if (args[0].equals("admin", true) && args[1].equals("setpoint", true) && sender.hasPermission(ADMIN_PERMISSION)) {
-                val size = routeStore.find(args[2])?.points?.size ?: 0
-                (1..size + 1).map(Int::toString).filter { it.startsWith(args[3]) }
-            } else emptyList()
+            3 -> when {
+                args[0].equals("start", true) && sender.hasPermission(ADMIN_PERMISSION) ->
+                    org.bukkit.Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[2], true) }
+                args[0].equals("admin", true) && args[1].lowercase() in setOf("setpoint", "resetauto") && sender.hasPermission(ADMIN_PERMISSION) ->
+                    routeStore.all().map(GuideRoute::id).filter { it.startsWith(args[2], true) }
+                else -> emptyList()
+            }
+            4 -> when {
+                args[0].equals("admin", true) && args[1].equals("setpoint", true) && sender.hasPermission(ADMIN_PERMISSION) -> {
+                    val size = routeStore.find(args[2])?.points?.size ?: 0
+                    ((1..size + 1).map(Int::toString) + (1 until size).map { "$it.5" }).filter { it.startsWith(args[3]) }
+                }
+                args[0].equals("admin", true) && args[1].equals("resetauto", true) && sender.hasPermission(ADMIN_PERMISSION) ->
+                    org.bukkit.Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[3], true) }
+                else -> emptyList()
+            }
             else -> emptyList()
         }
     }

@@ -14,7 +14,6 @@ import org.bukkit.util.BoundingBox
 import java.util.UUID
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * ガイドアレイのセッション管理です。
@@ -28,6 +27,7 @@ class GuideSessionService(
     private val renderer = GuideAllayRenderer(plugin, ::handleInteract)
     private val sessions = HashMap<UUID, GuideSession>()
     private val departures = mutableListOf<Departure>()
+    private val lastStopButtonNanos = HashMap<UUID, Long>()
 
     private data class Departure(
         val player: Player, val entityId: Int, val worldName: String,
@@ -86,9 +86,11 @@ class GuideSessionService(
         var anchorPlayerY: Double = Double.NaN,
         var anchorPlayerZ: Double = Double.NaN,
         var followTicks: Int = 0,
-        var displayEntityId: Int = -1,
         var displayIndex: Int = 0,
         var currentDisplayText: String? = null,
+        var currentName: String? = null,
+        var elapsedTicks: Long = 0,
+        var lastCueTick: Long = -60,
         var glowing: Boolean = false,
         var movingThisTick: Boolean = false,
         var particleTicks: Int = 0,
@@ -173,6 +175,7 @@ class GuideSessionService(
     fun onQuit(player: Player) {
         sessions.remove(player.uniqueId)?.let { if (!it.ended) destroyEntities(it) }
         discardDepartures(player)
+        lastStopButtonNanos.remove(player.uniqueId)
     }
 
     /**
@@ -196,10 +199,7 @@ class GuideSessionService(
     /** 通常終了・中断・置換時は最後の表示姿勢を保持して20 tick消滅演出を行います。 */
     private fun beginDeparture(session: GuideSession) {
         session.player.playSound(session.player.location, Sound.ENTITY_ALLAY_AMBIENT_WITHOUT_ITEM, 1.0f, 1.25f)
-        if (session.displayEntityId != -1) {
-            renderer.destroy(session.player, session.displayEntityId)
-            session.displayEntityId = -1
-        }
+        renderer.setName(session.player, session.entityId, null, false)
         val pose = renderer.pose(session.entityId)
         if (pose == null || !session.player.isOnline || session.player.world.name != session.route.worldName) {
             renderer.destroy(session.player, session.entityId)
@@ -221,10 +221,6 @@ class GuideSessionService(
 
     private fun destroyEntities(session: GuideSession) {
         renderer.destroy(session.player, session.entityId)
-        if (session.displayEntityId != -1) {
-            renderer.destroy(session.player, session.displayEntityId)
-            session.displayEntityId = -1
-        }
     }
 
     /** 仮想アレイへのクリックを受信し、サーバー実体へ流れないようにします。 */
@@ -344,6 +340,7 @@ class GuideSessionService(
     private fun tick(session: GuideSession) {
         val player = session.player
         if (player.world.name != session.route.worldName) return
+        session.elapsedTicks++
 
         session.movingThisTick = false
         if (session.phase == Phase.APPEARING) {
@@ -363,9 +360,10 @@ class GuideSessionService(
             val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
             val bob = bobOffset(session)
             renderer.moveTo(player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
-            updateFollowDisplay(session, bob)
+            updateFollowDisplay(session)
+            updateName(session)
             val interval = (settings.offCourseChatIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
-            if (session.followTicks % interval == 0) session.currentDisplayText?.let { sendPeriodicGuide(player, it) }
+            if (session.followTicks % interval == 0) session.currentName?.let { sendPeriodicGuide(player, it) }
             checkOffCourse(session)
             showParticles(session)
             return
@@ -374,8 +372,6 @@ class GuideSessionService(
             session.pausedForDistance = false
             session.followTicks = 0
             session.currentDisplayText = null
-            if (session.displayEntityId != -1) renderer.destroy(player, session.displayEntityId)
-            session.displayEntityId = -1
         }
         when (session.phase) {
             Phase.APPEARING -> error("出現演出は先に処理されます")
@@ -385,6 +381,7 @@ class GuideSessionService(
         }
         if (session.ended) return
         checkOffCourse(session)
+        updateName(session)
         showParticles(session)
         if (settings.debug && session.particleTicks % 10 == 0) showDebug(session)
     }
@@ -429,37 +426,10 @@ class GuideSessionService(
             player.spawnParticle(Particle.DUST_COLOR_TRANSITION, x, y, z, 1, 0.0, 0.0, 0.0, 0.0, Particle.DustTransition(org.bukkit.Color.fromRGB(128, 255, 230), org.bukkit.Color.WHITE, 0.75f))
         }
         if (++session.particleTicks % 100 != 0) return
-        val from = player.location.add(0.0, 1.0, 0.0)
-        val allay = org.bukkit.Location(player.world, session.x, session.y + 0.3, session.z)
+        // 次の目的地の上下に粒子を散らし、遠くからでも方向を見つけられるようにします。
         val point = session.route.points[session.nextIndex]
-        val target = org.bukkit.Location(player.world, point.x, point.y + 0.3, point.z)
-        if (session.phase == Phase.FOLLOWING) {
-            showParticleLine(player, from, target)
-        } else {
-            showParticleLine(player, from, allay)
-            showParticleLine(player, allay, target)
-        }
+        player.spawnParticle(Particle.END_ROD, point.x, point.y, point.z, 100, 0.3, 30.0, 0.3, 0.0)
     }
-
-    /** 誘導線上の位置にばらつきと目的地方向の速度を与えます。 */
-    private fun showParticleLine(player: Player, from: org.bukkit.Location, to: org.bukkit.Location) {
-        val dx = to.x - from.x
-        val dy = to.y - from.y
-        val dz = to.z - from.z
-        val length = sqrt(dx * dx + dy * dy + dz * dz)
-        if (length <= 1.0e-6) return
-        val count = (length * 2.0).toInt().coerceIn(1, 128)
-        val random = java.util.concurrent.ThreadLocalRandom.current()
-        for (i in 0..count) {
-            val t = i.toDouble() / count
-            player.spawnParticle(Particle.END_ROD,
-                from.x + dx * t + random.nextDouble(-0.1, 0.1),
-                from.y + dy * t + random.nextDouble(-0.1, 0.1),
-                from.z + dz * t + random.nextDouble(-0.1, 0.1),
-                0, dx / length, dy / length, dz / length, 0.05)
-        }
-    }
-
     /**
      * 論理位置に加える上下の単振動オフセットです。アレイの常時浮遊アニメーション
      * として全フェーズで描画位置へ適用し、移動中は周期を半分に速めます。
@@ -511,7 +481,7 @@ class GuideSessionService(
     }
 
     /**
-     * 計画した曲線経路に沿って飛行し、プレイヤーを向きます。
+     * 計画した曲線経路に沿って飛行し、進行方向を向きます。
      * FLYING は次の中継点、RETURNING はコース復帰後の中継点へ向かいます。
      */
     private fun tickFlight(session: GuideSession) {
@@ -526,14 +496,14 @@ class GuideSessionService(
             return
         }
         session.pathRetryTicks = 0
+        val previous = Triple(session.x, session.y, session.z)
         val pos = flight.advance(flightStep(session, flight, speed))
         session.x = pos.first
         session.y = pos.second
         session.z = pos.third
         session.movingThisTick = !flight.finished
 
-        val viewer = session.player.eyeLocation
-        val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
+        val (yaw, pitch) = GuideCourseMath.lookAngles(previous.first, previous.second, previous.third, session.x, session.y, session.z)
         val bob = bobOffset(session)
         renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
 
@@ -550,7 +520,7 @@ class GuideSessionService(
 
     /**
      * 追従モードです。アレイはプレイヤーから約2ブロックの占有可能な位置へ
-     * 飛行して滞在し、プレイヤーを向いて案内します。占有可能な位置が見つからない間は現在位置を維持します。
+     * 飛行中は進行方向、静止中はプレイヤーを向きます。占有可能な位置が見つからない間は現在位置を維持します。
      *
      * 案内は二系統のタイマーで行います。長周期のシステムチャットと、
      * 短周期で切り替わるアレイ頭上のテキスト表示（効果音付き）です。
@@ -561,6 +531,7 @@ class GuideSessionService(
         refreshAnchorIfNeeded(session)
 
         val flight = session.flight
+        val previous = Triple(session.x, session.y, session.z)
         if (flight != null) {
             val pos = flight.advance(flightStep(session, flight, settings.followFlightSpeed))
             session.x = pos.first
@@ -569,18 +540,21 @@ class GuideSessionService(
             session.movingThisTick = !flight.finished
         }
 
-        // 移動中も静止中もプレイヤーを向きます。
+        // 移動中は進行方向を向き、静止中はプレイヤーを向きます。
         val viewer = session.player.eyeLocation
-        val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
+        val (yaw, pitch) = if (GuideCourseMath.distanceSq(previous.first, previous.second, previous.third, session.x, session.y, session.z) > 1.0e-8)
+            GuideCourseMath.lookAngles(previous.first, previous.second, previous.third, session.x, session.y, session.z)
+        else GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
         val bob = bobOffset(session)
         renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
-        updateFollowDisplay(session, bob)
+        updateFollowDisplay(session)
+        updateName(session)
 
         // 長周期のシステムチャットです。最初の発火後にアレイが発光を開始します。
         val chatInterval = (settings.offCourseChatIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
         if (session.followTicks % chatInterval == 0) {
             // 再翻訳せず表示済みの文を使い、言語変更のタイミングでも表示と一致させます。
-            session.currentDisplayText?.let { sendPeriodicGuide(session.player, it) }
+            session.currentName?.let { sendPeriodicGuide(session.player, it) }
             if (!session.glowing) {
                 session.glowing = true
                 renderer.setGlowing(session.player, session.entityId, true)
@@ -588,56 +562,64 @@ class GuideSessionService(
         }
     }
 
-    /**
-     * 追従中のアレイ頭上テキストです。短い周期ごとに内容を順送りで切り替え、
-     * 切替時に効果音を再生します。アレイのCustomNameより高い位置に、
-     * 常時 viewer 正面を向くテキストディスプレイで表示します。
-     */
-    private fun updateFollowDisplay(session: GuideSession, allayBob: Double) {
-        val displayY = session.y + allayBob + DISPLAY_OFFSET
-        if (session.displayEntityId == -1) {
-            val texts = followDisplayTexts(session.player)
-            if (texts.isEmpty()) return
-            session.displayIndex = 0
-            session.currentDisplayText = texts[0]
-            session.displayEntityId = renderer.spawnTextDisplay(
-                session.player, session.x, displayY, session.z,
-                LegacyComponentSerializer.legacySection().deserialize(texts[0]),
-            )
-            playFollowCue(session)
-            return
-        }
-        renderer.moveTo(session.player, session.displayEntityId, session.x, displayY, session.z, 0f, 0f)
-
-        val interval = (settings.followDisplayIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
-        if (session.followTicks % interval != 0) return
+    /** 逸脱中の案内文は状態遷移と一定間隔で更新します。 */
+    private fun updateFollowDisplay(session: GuideSession) {
         val texts = followDisplayTexts(session.player)
         if (texts.isEmpty()) return
-        session.displayIndex = (session.displayIndex + 1) % texts.size
+        val interval = (settings.followDisplayIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
+        if (session.currentDisplayText == null) {
+            session.displayIndex = 0
+        } else if (session.followTicks % interval == 0) {
+            session.displayIndex = (session.displayIndex + 1) % texts.size
+        } else return
         session.currentDisplayText = texts[session.displayIndex]
-        renderer.setTextDisplayText(
-            session.player, session.displayEntityId,
-            LegacyComponentSerializer.legacySection().deserialize(texts[session.displayIndex]),
-        )
         playFollowCue(session)
     }
 
-    /** 表示中の台詞と中断操作を同じチャットメッセージにまとめます。 */
-    private fun sendPeriodicGuide(player: Player, message: String) {
-        val serializer = LegacyComponentSerializer.legacySection()
-        val button = serializer.deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STOP_BUTTON))
-            .clickEvent(ClickEvent.runCommand("/guide stop"))
-            .hoverEvent(HoverEvent.showText(serializer.deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STOP_HOVER))))
-        player.sendMessage(serializer.deserialize(message).append(net.kyori.adventure.text.Component.space()).append(button))
-    }
-    private fun playFollowCue(session: GuideSession) {
-        session.player.playSound(
-            session.player.location.set(session.x, session.y, session.z),
-            Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM,
-            0.8f, 0.98f,
-        )
+    /** 状態ごとの文言を一つのネームタグへ集約し、変化時だけ送信します。 */
+    private fun updateName(session: GuideSession) {
+        val text = when {
+            session.movingThisTick -> {
+                val texts = ChanponI18n.list(session.player, Keys.CHANPON_UTILITIES_GUIDE_MOVING_DISPLAY)
+                val interval = (settings.followDisplayIntervalSeconds * TICKS_PER_SECOND).toLong().coerceAtLeast(1)
+                if (texts.isEmpty()) ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
+                else texts[(session.elapsedTicks / interval % texts.size).toInt()]
+            }
+            session.pausedForDistance || session.phase == Phase.FOLLOWING ->
+                session.currentDisplayText ?: ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
+            else -> ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
+        }
+        if (text != session.currentName) {
+            session.currentName = text
+            renderer.setName(session.player, session.entityId, LegacyComponentSerializer.legacySection().deserialize(text), true)
+        }
     }
 
+    /** ボタンの表示時刻をプレイヤーごとに保持し、連続表示を抑えます。 */
+    private fun sendPeriodicGuide(player: Player, message: String) {
+        val serializer = LegacyComponentSerializer.legacySection()
+        var result = serializer.deserialize(message)
+        val now = System.nanoTime()
+        val last = lastStopButtonNanos[player.uniqueId]
+        if (last == null || now - last >= 10_000_000_000L) {
+            val button = serializer.deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STOP_BUTTON))
+                .clickEvent(ClickEvent.runCommand("/guide stop"))
+                .hoverEvent(HoverEvent.showText(serializer.deserialize(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STOP_HOVER))))
+            result = result.append(net.kyori.adventure.text.Component.space()).append(button)
+            lastStopButtonNanos[player.uniqueId] = now
+        }
+        player.sendMessage(result)
+    }
+
+    /** 開始・終了・到着の必須音とは独立して、任意の案内音を3秒に1回へ制限します。 */
+    private fun playFollowCue(session: GuideSession) {
+        if (session.elapsedTicks - session.lastCueTick < 60) return
+        session.lastCueTick = session.elapsedTicks
+        session.player.playSound(
+            session.player.location.set(session.x, session.y, session.z),
+            Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 0.98f,
+        )
+    }
     private fun followDisplayTexts(player: Player): List<String> =
         ChanponI18n.list(player, Keys.CHANPON_UTILITIES_GUIDE_FOLLOW_DISPLAY)
 
@@ -719,10 +701,6 @@ class GuideSessionService(
     private fun exitFollowing(session: GuideSession) {
         session.phase = Phase.RETURNING
         session.currentDisplayText = null
-if (session.displayEntityId != -1) {
-            renderer.destroy(session.player, session.displayEntityId)
-            session.displayEntityId = -1
-        }
         if (session.glowing) {
             session.glowing = false
             renderer.setGlowing(session.player, session.entityId, false)
@@ -761,7 +739,5 @@ if (session.displayEntityId != -1) {
         /** 追従アンカーの再計算を行うプレイヤー移動量の閾値（二乗）です。 */
         const val ANCHOR_REFRESH_MOVE_SQ = 0.25 * 0.25
 
-        /** 追従表示のテキストディスプレイを置く、足元からの高さです。 */
-        const val DISPLAY_OFFSET = 1.55
     }
 }

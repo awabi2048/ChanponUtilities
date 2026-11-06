@@ -35,8 +35,8 @@ object GuideCourseMath {
         return sqrt(cx * cx + cy * cy + cz * cz)
     }
 
-    /** コース内では8ブロック以上離れた場合にその場で待ちます。 */
-    fun shouldPauseForDistance(onCourse: Boolean, distanceSquared: Double): Boolean = onCourse && distanceSquared >= 64.0
+    /** コース内では12ブロック以上離れた場合にその場で待ちます。 */
+    fun shouldPauseForDistance(onCourse: Boolean, distanceSquared: Double): Boolean = onCourse && distanceSquared >= 144.0
 
     /** 標本列を一時的なペア一覧へ複製せずに判定します。 */
     fun isNearPath(x: Double, y: Double, z: Double, points: List<Triple<Double, Double, Double>>, radius: Double): Boolean {
