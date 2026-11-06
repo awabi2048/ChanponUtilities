@@ -93,6 +93,7 @@ class GuideSessionService(
         var glowing: Boolean = false,
         var movingThisTick: Boolean = false,
         var particleTicks: Int = 0,
+        val particleRadius: GuideParticleRadius = GuideParticleRadius(),
         var speedPerTick: Double = 0.0,
         var movementNoisePhase: Double = 0.0,
         var pathRetryTicks: Int = 0,
@@ -487,14 +488,22 @@ class GuideSessionService(
     private fun showParticles(session: GuideSession) {
         val player = session.player
         val phase = session.particleTicks * Math.PI / 20.0
+        val radiusTarget = when {
+            session.phase == Phase.WAITING && session.waypointProgress?.messageSent != true && !session.relocatedDuringMessageWait -> settings.waypointRadius
+            session.movingThisTick -> 0.75
+            else -> 2.0
+        }
+        val radius = session.particleRadius.tick(radiusTarget)
+        val origin = if (session.phase == Phase.WAITING) org.bukkit.Color.YELLOW else org.bukkit.Color.fromRGB(128, 255, 230)
+        val transition = Particle.DustTransition(origin, org.bukkit.Color.WHITE, 0.75f)
         for (i in 0..1) {
             val angle = phase + i * Math.PI
             // 各周回点に2種類を同数・同位置で表示します。
-            val x = session.x + cos(angle) * 2.0
+            val x = session.x + cos(angle) * radius
             val y = session.y - 0.1 + sin(phase * 0.5) * 0.1
-            val z = session.z + sin(angle) * 2.0
+            val z = session.z + sin(angle) * radius
             player.spawnParticle(Particle.ENCHANTED_HIT, x, y, z, 1, 0.0, 0.0, 0.0, 0.0)
-            player.spawnParticle(Particle.DUST_COLOR_TRANSITION, x, y, z, 1, 0.0, 0.0, 0.0, 0.0, Particle.DustTransition(org.bukkit.Color.fromRGB(128, 255, 230), org.bukkit.Color.WHITE, 0.75f))
+            player.spawnParticle(Particle.DUST_COLOR_TRANSITION, x, y, z, 1, 0.0, 0.0, 0.0, 0.0, transition)
         }
         session.particleTicks++
         val point = session.route.points[session.nextIndex]
