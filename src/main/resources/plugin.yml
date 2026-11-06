@@ -5,6 +5,7 @@ api-version: "26.1.2"
 depend:
   - CC-System
 softdepend:
+  - WorldGuard
   - MyWorldManager
   - GSit
   - ProtocolLib
