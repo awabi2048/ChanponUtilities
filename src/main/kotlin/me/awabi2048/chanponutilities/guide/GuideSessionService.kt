@@ -275,9 +275,6 @@ class GuideSessionService(
         return GuideSmoothPath.build(knots) { x, y, z -> canOccupyPath(session.player.world, x, y, z) }?.let(GuideCourseMath.FlightPath::of)
     }
 
-    private fun planFlightTo(session: GuideSession, tx: Double, ty: Double, tz: Double): GuideCourseMath.FlightPath? =
-        findPath(session, Triple(session.x, session.y, session.z), Triple(tx, ty, tz))
-
     private fun findRawPath(session: GuideSession, from: Triple<Double, Double, Double>, to: Triple<Double, Double, Double>): List<Triple<Double, Double, Double>>? =
         GuidePathfinder.find(from, to) { x, y, z -> canOccupyPath(session.player.world, x, y, z) }
 
@@ -355,15 +352,11 @@ class GuideSessionService(
         if (tooFar) {
             session.pausedForDistance = true
             session.speedPerTick = 0.0
-            session.followTicks++
             val viewer = player.eyeLocation
             val (yaw, pitch) = GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
             val bob = bobOffset(session)
             renderer.moveTo(player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
-            updateFollowDisplay(session)
             updateName(session)
-            val interval = (settings.offCourseChatIntervalSeconds * TICKS_PER_SECOND).toInt().coerceAtLeast(1)
-            if (session.followTicks % interval == 0) session.currentName?.let { sendPeriodicGuide(player, it) }
             checkOffCourse(session)
             showParticles(session)
             return
@@ -429,6 +422,27 @@ class GuideSessionService(
         // 次の目的地の上下に粒子を散らし、遠くからでも方向を見つけられるようにします。
         val point = session.route.points[session.nextIndex]
         player.spawnParticle(Particle.END_ROD, point.x, point.y, point.z, 100, 0.3, 30.0, 0.3, 0.0)
+        if (session.phase == Phase.FOLLOWING) showReturnLine(session, point)
+    }
+
+    /** 逸脱中はプレイヤーから次の目的地へ向かう流れを表示します。 */
+    private fun showReturnLine(session: GuideSession, point: GuidePoint) {
+        val from = session.player.location.add(0.0, 1.0, 0.0)
+        val dx = point.x - from.x
+        val dy = point.y + 0.3 - from.y
+        val dz = point.z - from.z
+        val length = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        if (length <= 1.0e-6) return
+        val random = java.util.concurrent.ThreadLocalRandom.current()
+        val count = (length * 2.0).toInt().coerceIn(1, 128)
+        for (i in 0..count) {
+            val t = i.toDouble() / count
+            session.player.spawnParticle(Particle.END_ROD,
+                from.x + dx * t + random.nextDouble(-0.1, 0.1),
+                from.y + dy * t + random.nextDouble(-0.1, 0.1),
+                from.z + dz * t + random.nextDouble(-0.1, 0.1),
+                0, dx / length, dy / length, dz / length, 0.05)
+        }
     }
     /**
      * 論理位置に加える上下の単振動オフセットです。アレイの常時浮遊アニメーション
@@ -541,10 +555,10 @@ class GuideSessionService(
         }
 
         // 移動中は進行方向を向き、静止中はプレイヤーを向きます。
-        val viewer = session.player.eyeLocation
+        val target = session.route.points[session.nextIndex]
         val (yaw, pitch) = if (GuideCourseMath.distanceSq(previous.first, previous.second, previous.third, session.x, session.y, session.z) > 1.0e-8)
             GuideCourseMath.lookAngles(previous.first, previous.second, previous.third, session.x, session.y, session.z)
-        else GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, viewer.x, viewer.y, viewer.z)
+        else GuideCourseMath.lookAngles(session.x, session.y + ALLAY_HEIGHT / 2.0, session.z, target.x, target.y, target.z)
         val bob = bobOffset(session)
         renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
         updateFollowDisplay(session)
@@ -585,7 +599,7 @@ class GuideSessionService(
                 if (texts.isEmpty()) ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
                 else texts[(session.elapsedTicks / interval % texts.size).toInt()]
             }
-            session.pausedForDistance || session.phase == Phase.FOLLOWING ->
+            session.phase == Phase.FOLLOWING ->
                 session.currentDisplayText ?: ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
             else -> ChanponI18n.text(session.player, Keys.CHANPON_UTILITIES_GUIDE_ALLAY_NAME)
         }
@@ -645,9 +659,9 @@ class GuideSessionService(
         val candidates = GuideFollowAnchor.candidates(loc.x, loc.y, loc.z, next.x, next.z)
         for ((x, y, z) in candidates) {
             if (canOccupyAllay(session.player.world, x, y, z)) {
-                val flight = planFlightTo(session, x, y, z) ?: continue
                 session.anchorValid = true
-                session.flight = flight
+                // 誘導時は壁をすり抜け、到着先だけ占有可能か確認します。
+                session.flight = GuideCourseMath.FlightPath.of(listOf(Triple(session.x, session.y, session.z), Triple(x, y, z)))
                 return
             }
         }
