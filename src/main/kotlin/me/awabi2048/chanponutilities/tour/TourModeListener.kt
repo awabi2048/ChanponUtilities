@@ -41,6 +41,12 @@ internal class TourModeListener(
     @EventHandler(priority = EventPriority.MONITOR)
     fun onWorldChange(event: PlayerChangedWorldEvent) = later(event.player)
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    fun afterGameModeChange(event: PlayerGameModeChangeEvent) {
+        // モード変更時にMinecraft自身が飛行権限を初期化するため、変更完了後に再適用します。
+        later(event.player)
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onGameMode(event: PlayerGameModeChangeEvent) {
         if (bypass(event.player) || event.newGameMode == tourGameMode(isFreecamActive(event.player.uniqueId))) return
@@ -50,7 +56,7 @@ internal class TourModeListener(
         later(event.player)
     }
 
-    private fun later(player: Player) {
+    fun later(player: Player) {
         plugin.server.scheduler.runTask(plugin, Runnable { sync(player) })
     }
 
