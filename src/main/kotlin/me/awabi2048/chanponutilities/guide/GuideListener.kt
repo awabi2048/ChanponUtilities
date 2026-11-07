@@ -40,7 +40,7 @@ class GuideListener(
         for (player in plugin.server.onlinePlayers) {
             val current = position(player.location) ?: continue
             val active = sessionService.isGuiding(player)
-            val route = poller.poll(player.uniqueId, current, routeStore.autoStartRoutes(current.world), active)
+            val route = poller.poll(player.uniqueId, current, routeStore.autoStartRoutes(current.world).filterNot { routeStore.autoStartHistory.hasStarted(player.uniqueId, it.id) }, active)
             if (route != null) startSelectedRoute(player, route)
         }
     }
@@ -73,13 +73,19 @@ class GuideListener(
 
     private fun tryAutoStart(player: Player, from: GuideAutoStart.Position?, to: GuideAutoStart.Position) {
         if (sessionService.isGuiding(player)) return
-        val route = GuideAutoStart.select(routeStore.autoStartRoutes(to.world), from, to) ?: return
+        val route = GuideAutoStart.select(routeStore.autoStartRoutes(to.world).filterNot { routeStore.autoStartHistory.hasStarted(player.uniqueId, it.id) }, from, to) ?: return
         startSelectedRoute(player, route)
     }
 
     private fun startSelectedRoute(player: Player, route: GuideRoute) {
+        try {
+            routeStore.autoStartHistory.record(player.uniqueId, route.id)
+        } catch (error: Exception) {
+            plugin.logger.log(java.util.logging.Level.SEVERE, "自動開始履歴を保存できません: ${player.uniqueId} / ${route.id}", error)
+            return
+        }
         sessionService.startGuide(player, route)
-        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_STARTED, "route" to route.label))
+
     }
 
     @EventHandler
@@ -90,9 +96,7 @@ class GuideListener(
 
     @EventHandler
     fun onWorldChange(event: PlayerChangedWorldEvent) {
-        if (sessionService.onWorldLeft(event.player)) {
-            event.player.sendMessage(ChanponI18n.text(event.player, Keys.CHANPON_UTILITIES_GUIDE_WORLD_LEFT))
-        }
+        sessionService.onWorldLeft(event.player)
         val current = position(event.player.location) ?: return
         poller.record(event.player.uniqueId, current)
         tryAutoStart(event.player, null, current)

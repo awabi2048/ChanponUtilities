@@ -19,6 +19,7 @@ class GuideRouteStore(
     private val plugin: JavaPlugin,
 ) {
     private val filePath: Path = plugin.dataFolder.toPath().resolve(FILE_NAME)
+    internal val autoStartHistory = GuideAutoStartHistory(plugin.dataFolder.toPath().resolve("guide_auto_start_history.yml"))
 
     /** ルートと自動開始用索引を同時に切り替え、読込途中の不整合を防ぎます。 */
     private data class Snapshot(

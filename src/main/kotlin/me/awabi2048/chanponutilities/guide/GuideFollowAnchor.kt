@@ -8,7 +8,8 @@ import kotlin.math.sin
 internal object GuideFollowAnchor {
     fun candidates(x: Double, y: Double, z: Double, targetX: Double, targetZ: Double): List<Triple<Double, Double, Double>> {
         val angle = atan2(targetZ - z, targetX - x)
-        return listOf(0.0, 25.0, -25.0, 50.0, -50.0, 90.0, -90.0).map { offset ->
+        // 前方が壁に塞がれていても、同じ高さ・距離の背面側まで候補を探します。
+        return listOf(0.0, 25.0, -25.0, 50.0, -50.0, 90.0, -90.0, 120.0, -120.0, 150.0, -150.0, 180.0).map { offset ->
             val direction = angle + Math.toRadians(offset)
             Triple(x + 2.0 * cos(direction), y + 1.0, z + 2.0 * sin(direction))
         }

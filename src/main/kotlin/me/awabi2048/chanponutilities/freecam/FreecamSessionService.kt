@@ -73,6 +73,8 @@ class FreecamSessionService(
         )
         return try {
             player.gameMode = GameMode.SPECTATOR
+            // 他機能がモード変更を拒否した場合、身体やチャンクの確保を残さず復元します。
+            check(player.gameMode == GameMode.SPECTATOR) { "スペクテイターモードへの変更が拒否されました" }
             var previousCameraTooFar = false
             if (startMode == FreecamStartMode.PREVIOUS_CAMERA_POSITION) {
                 recovery.loadPreviousCamera(player.uniqueId)?.let { location ->

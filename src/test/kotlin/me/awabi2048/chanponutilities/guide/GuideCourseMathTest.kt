@@ -7,7 +7,26 @@ import org.junit.jupiter.api.Test
 import kotlin.math.abs
 
 class GuideCourseMathTest {
-
+    @Test fun `following speed is one third of player distance`() {
+        assertEquals(0.0, GuideCourseMath.followSpeed(0.0), 1e-9)
+        assertEquals(2.0, GuideCourseMath.followSpeed(6.0), 1e-9)
+        assertEquals(8.0, GuideCourseMath.followSpeed(24.0), 1e-9)
+    }
+    @Test fun `teleport threshold includes exactly 32 blocks`() {
+        assertFalse(GuideCourseMath.shouldTeleport(1023.99))
+        assertTrue(GuideCourseMath.shouldTeleport(1024.0))
+    }
+    @Test fun `arrows describe the destination relative to player yaw`() {
+        assertEquals("↑", GuideCourseMath.relativeArrow(0f, 0.0, 5.0))
+        assertEquals("←", GuideCourseMath.relativeArrow(0f, 5.0, 0.0))
+        assertEquals("↓", GuideCourseMath.relativeArrow(0f, 0.0, -5.0))
+        assertEquals("↗", GuideCourseMath.relativeArrow(0f, -5.0, 5.0))
+        assertEquals("↖", GuideCourseMath.relativeArrow(0f, 5.0, 5.0))
+        assertEquals("↘", GuideCourseMath.relativeArrow(0f, -5.0, -5.0))
+        assertEquals("↙", GuideCourseMath.relativeArrow(0f, 5.0, -5.0))
+        assertEquals("↑", GuideCourseMath.relativeArrow(90f, -5.0, 0.0))
+        assertEquals("←", GuideCourseMath.relativeArrow(90f, 0.0, 5.0))
+    }
     private fun point(x: Double, y: Double, z: Double) =
         GuidePoint(x, y, z, 0f, 0f, emptyList())
 

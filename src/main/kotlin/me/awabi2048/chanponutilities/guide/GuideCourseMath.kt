@@ -12,6 +12,16 @@ import kotlin.math.sqrt
  */
 object GuideCourseMath {
 
+    /** 水平方向をプレイヤーの正面・右方向に投影し、相対方位を8方向の矢印で返します。 */
+    fun relativeArrow(yaw: Float, dx: Double, dz: Double): String {
+        if (dx * dx + dz * dz < 1.0e-12) return "↑"
+        val radians = Math.toRadians(yaw.toDouble())
+        val forward = -kotlin.math.sin(radians) * dx + kotlin.math.cos(radians) * dz
+        val right = -kotlin.math.cos(radians) * dx - kotlin.math.sin(radians) * dz
+        val sector = kotlin.math.floor((atan2(right, forward) + Math.PI / 8.0) / (Math.PI / 4.0)).toInt()
+        return listOf("↑", "↗", "→", "↘", "↓", "↙", "←", "↖")[Math.floorMod(sector, 8)]
+    }
+
     /**
      * 点 p から線分 ab への最短距離です。
      * 「現在区間を中心とする円筒（3D カプセル）」の内外判定に使います。
@@ -35,6 +45,20 @@ object GuideCourseMath {
         return sqrt(cx * cx + cy * cy + cz * cz)
     }
 
+    /** 全状態で32ブロック以上離れたアレイをプレイヤー付近へ再配置します。 */
+    fun shouldTeleport(distanceSquared: Double): Boolean = distanceSquared >= 32.0 * 32.0
+
+    /** 追従速度はプレイヤーまでの距離の3分の1 [ブロック/秒] です。 */
+    fun followSpeed(distance: Double): Double = distance / 3.0
+
+    /** 標本列を一時的なペア一覧へ複製せずに判定します。 */
+    fun isNearPath(x: Double, y: Double, z: Double, points: List<Triple<Double, Double, Double>>, radius: Double): Boolean {
+        for (i in 1 until points.size) {
+            val a = points[i - 1]; val b = points[i]
+            if (distanceToSegment(x, y, z, a.first, a.second, a.third, b.first, b.second, b.third) <= radius) return true
+        }
+        return false
+    }
     /** 現在区間のカプセル領域内にプレイヤーがいるかを返します。 */
     fun isOnCourse(
         px: Double, py: Double, pz: Double,

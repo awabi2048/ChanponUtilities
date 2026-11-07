@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "me.awabi2048"
-version = "26.1105.4"
+version = "26.1107.3"
 
 repositories {
     mavenLocal()
@@ -15,6 +15,7 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://api.modrinth.com/maven")
     maven("https://repo.dmulloy2.net/repository/public/")
+    maven("https://maven.enginehub.org/repo/")
     mavenCentral()
 }
 
@@ -29,10 +30,12 @@ kotlin {
 // pom.xml の provided スコープ相当（compileOnly へ配置し、テストのコンパイル・実行双方で見えるよう testImplementation にも追加）
 val providedDeps = listOf(
     "io.papermc.paper:paper-api:26.2.build.129-stable",
-    "com.awabi2048:CC-System:26.1027.2",
-    "awabi2048:my-world-manager:26.911.1",
+    "com.awabi2048:CC-System:26.1107.1",
+    "awabi2048:my-world-manager:26.1022.2",
     "maven.modrinth:GOHbQGyX:nZM8fxpG",
     "net.dmulloy2:ProtocolLib:5.4.0",
+    "com.sk89q.worldedit:worldedit-bukkit:7.3.16",
+    "com.sk89q.worldguard:worldguard-bukkit:7.0.14",
 )
 
 dependencies {
@@ -59,6 +62,8 @@ tasks.processResources {
 }
 
 tasks.shadowJar {
+    // Kotlinメタデータを変換器へ渡してから重複を処理します。
+    duplicatesStrategy = DuplicatesStrategy.WARN
     archiveBaseName.set("Chanpon-Utilities")
     archiveClassifier.set("")
 }
