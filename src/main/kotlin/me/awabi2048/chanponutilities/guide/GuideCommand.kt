@@ -35,7 +35,7 @@ class GuideCommand(
                 }
                 // Bukkitのセレクター解決は /execute の実行位置を含むコマンド元を使います。
                 val target = if (targetName == null) player else GuideTargetResolver.resolve(targetName,
-                    nearest = { runCatching { org.bukkit.Bukkit.selectEntities(sender, "@p").singleOrNull() as? Player }.getOrNull() },
+                    nearest = { nearestPlayer(sender) },
                     byName = org.bukkit.Bukkit::getPlayerExact)
                 if (target == null) {
                     sender.sendMessage(ChanponI18n.text(player, if (targetName == null) Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY else Keys.CHANPON_UTILITIES_GUIDE_TARGET_UNAVAILABLE))
@@ -196,8 +196,10 @@ class GuideCommand(
                     sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_RESET_AUTO_USAGE))
                     return
                 }
-                val id = runCatching { java.util.UUID.fromString(name) }.getOrNull()
-                    ?: org.bukkit.Bukkit.getOfflinePlayerIfCached(name)?.uniqueId
+                val id = GuideTargetResolver.resolve(name,
+                    nearest = { nearestPlayer(sender)?.uniqueId },
+                    byName = { value -> runCatching { java.util.UUID.fromString(value) }.getOrNull()
+                        ?: org.bukkit.Bukkit.getOfflinePlayerIfCached(value)?.uniqueId })
                 if (routeStore.find(route) == null || id == null) {
                     sender.sendMessage(ChanponI18n.text(sender as? Player, Keys.CHANPON_UTILITIES_GUIDE_RESET_AUTO_INVALID))
                     return
@@ -251,12 +253,16 @@ class GuideCommand(
                     ((1..size + 1).map(Int::toString) + (1 until size).map { "$it.5" }).filter { it.startsWith(args[3]) }
                 }
                 args[0].equals("admin", true) && args[1].equals("resetauto", true) && sender.hasPermission(ADMIN_PERMISSION) ->
-                    org.bukkit.Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[3], true) }
+                    (listOf("@p") + org.bukkit.Bukkit.getOnlinePlayers().map { it.name }).filter { it.startsWith(args[3], true) }
                 else -> emptyList()
             }
             else -> emptyList()
         }
     }
+
+    /** 両コマンドで同じ実行位置を使い、対象外のセレクターは解決しません。 */
+    private fun nearestPlayer(sender: CommandSender): Player? =
+        runCatching { org.bukkit.Bukkit.selectEntities(sender, "@p").singleOrNull() as? Player }.getOrNull()
 
     private companion object {
         const val PERMISSION = "chanponutilities.guide"

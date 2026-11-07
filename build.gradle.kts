@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "me.awabi2048"
-version = "26.1107.2"
+version = "26.1107.3"
 
 repositories {
     mavenLocal()

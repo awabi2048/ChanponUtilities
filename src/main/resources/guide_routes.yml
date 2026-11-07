@@ -2,6 +2,7 @@
 #
 # routes.<id>: ルート識別子。/guide start <id> で参照します。
 # 管理者は /guide start <id> @p で実行位置に最も近いプレイヤーを指定できます。
+# /guide admin resetauto <id> @p でも同じプレイヤーを指定できます。
 #   name: 任意の表示名（省略時は id を表示します）
 #   world: 対象ワールド名（必須。ルートは単一ワールド内に限定します）
 #   auto_start: 自動開始領域（省略可）。ルートと同じ world を指定します。
