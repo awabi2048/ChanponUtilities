@@ -36,6 +36,18 @@ class GuideRouteCodecTest {
         assertTrue(!points[1].isStop)
     }
 
+    @Test fun `rejects positive movement delay for a zero length segment`() {
+        val result = parse("""
+            routes:
+              tour:
+                world: world
+                points:
+                  - {x: 0, y: 64, z: 0, yaw: 0, pitch: 0, message: [{text: later, delay: 3}]}
+                  - {x: 0, y: 64, z: 0, yaw: 0, pitch: 0}
+        """.trimIndent())
+        assertTrue(result is GuideRouteCodec.ParseResult.Failure)
+    }
+
     @Test
     fun `parses a route with waypoints and messages`() {
         val result = parse(

@@ -111,6 +111,16 @@ object GuideRouteCodec {
                 message.filter { it.delay != null },
             )
         }
+        // 正の遅延は移動中だけ進むため、移動距離がない区間では配信が永久に終わりません。
+        for (i in points.indices) {
+            if (points[i].delayedMessages.none { (it.delay ?: 0L) > 0L }) continue
+            val end = GuideStopPlan.nextStopIndex(i, points.map { it.isStop }) ?: continue
+            val hasMovement = (i until end).any { n ->
+                val a = points[n]; val b = points[n + 1]
+                GuideCourseMath.distanceSq(a.x, a.y, a.z, b.x, b.y, b.z) > 1.0e-12
+            }
+            if (!hasMovement) errors += "routes.$id.points[$i] の遅延配信には移動距離が必要です"
+        }
         // 自動開始は省略可能ですが、指定した場合は全頂点とワールドを厳密に検証します。
         var autoStart: GuideAutoStartArea? = null
         if (section.contains("auto_start")) {
