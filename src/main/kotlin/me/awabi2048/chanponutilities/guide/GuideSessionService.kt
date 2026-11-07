@@ -106,6 +106,7 @@ class GuideSessionService(
         val distanceWait: GuideDistanceWait = GuideDistanceWait(),
         var relocatedDuringMessageWait: Boolean = false,
         var lastTeleportAttempt: Long = -20,
+        val teleportDelay: GuideTeleportDelay = GuideTeleportDelay(),
         var pausedForDistance: Boolean = false,
         var ended: Boolean = false,
         var appearanceTick: Int = 0,
@@ -368,7 +369,10 @@ class GuideSessionService(
         if (session.elapsedTicks % 10L == 1L) showActionBar(session)
 
         session.movingThisTick = false
-        if (session.elapsedTicks - session.lastTeleportAttempt >= 20 && shouldTeleportNearPlayer(session)) {
+        val playerPosition = player.location
+        val teleportReady = session.teleportDelay.tick(GuideCourseMath.distanceSq(
+            playerPosition.x, playerPosition.y, playerPosition.z, session.x, session.y, session.z))
+        if (teleportReady && session.elapsedTicks - session.lastTeleportAttempt >= 20) {
             session.lastTeleportAttempt = session.elapsedTicks
             teleportNearPlayer(session)
         }
@@ -379,7 +383,11 @@ class GuideSessionService(
         // 経路内で置いていかれた場合は進捗を保持して待ちます。
         val location = player.location
         val onCourse = session.coursePath?.let { GuideCourseMath.isNearPath(location.x, location.y, location.z, it.points, settings.courseRadius) } == true
-        val shouldWait = session.distanceWait.tick(session.phase == Phase.FLYING && onCourse,
+        val previousStop = session.route.points[session.fromIndex]
+        val playerBehind = GuideCourseMath.playerBehind(
+            GuideCourseMath.distanceSq(location.x, location.y, location.z, previousStop.x, previousStop.y, previousStop.z),
+            GuideCourseMath.distanceSq(session.x, session.y, session.z, previousStop.x, previousStop.y, previousStop.z))
+        val shouldWait = session.distanceWait.tick(session.phase == Phase.FLYING && onCourse && playerBehind,
             GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z))
         if (shouldWait) {
             val justStarted = !session.pausedForDistance
@@ -429,12 +437,6 @@ class GuideSessionService(
         if (session.glowing == shouldGlow) return
         session.glowing = shouldGlow
         renderer.setGlowing(session.player, session.entityId, shouldGlow)
-    }
-
-    /** プレイヤーとアレイの3次元距離が32ブロック以上なら再配置します。 */
-    private fun shouldTeleportNearPlayer(session: GuideSession): Boolean {
-        val location = session.player.location
-        return GuideCourseMath.shouldTeleport(GuideCourseMath.distanceSq(location.x, location.y, location.z, session.x, session.y, session.z))
     }
 
     /** 移動先の空きだけを確認し、仮想アレイを新しい位置へ直接再生成します。 */
