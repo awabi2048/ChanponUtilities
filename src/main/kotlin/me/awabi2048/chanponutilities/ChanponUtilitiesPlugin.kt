@@ -360,7 +360,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             logger.info("MyWorldManager is unavailable; player-state integration is disabled.")
         }
         if (isModuleEnabled(ChanponModule.TOUR_MODE)) {
-            val tour = TourModeListener(this)
+            val tour = TourModeListener(this) { playerId -> freecamSessionService?.isActive(playerId) == true }
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
             if (server.pluginManager.isPluginEnabled("WorldGuard")) {
