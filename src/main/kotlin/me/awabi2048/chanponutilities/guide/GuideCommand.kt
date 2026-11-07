@@ -33,7 +33,10 @@ class GuideCommand(
                     sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_MANAGEMENT_NO_PERMISSION))
                     return true
                 }
-                val target = if (targetName == null) player else org.bukkit.Bukkit.getPlayerExact(targetName)
+                // Bukkitのセレクター解決は /execute の実行位置を含むコマンド元を使います。
+                val target = if (targetName == null) player else GuideTargetResolver.resolve(targetName,
+                    nearest = { runCatching { org.bukkit.Bukkit.selectEntities(sender, "@p").singleOrNull() as? Player }.getOrNull() },
+                    byName = org.bukkit.Bukkit::getPlayerExact)
                 if (target == null) {
                     sender.sendMessage(ChanponI18n.text(player, if (targetName == null) Keys.CHANPON_UTILITIES_GUIDE_PLAYER_ONLY else Keys.CHANPON_UTILITIES_GUIDE_TARGET_UNAVAILABLE))
                     return true
@@ -237,7 +240,7 @@ class GuideCommand(
             }
             3 -> when {
                 args[0].equals("start", true) && sender.hasPermission(ADMIN_PERMISSION) ->
-                    org.bukkit.Bukkit.getOnlinePlayers().map { it.name }.filter { it.startsWith(args[2], true) }
+                    (listOf("@p") + org.bukkit.Bukkit.getOnlinePlayers().map { it.name }).filter { it.startsWith(args[2], true) }
                 args[0].equals("admin", true) && args[1].lowercase() in setOf("setpoint", "resetauto") && sender.hasPermission(ADMIN_PERMISSION) ->
                     routeStore.all().map(GuideRoute::id).filter { it.startsWith(args[2], true) }
                 else -> emptyList()
