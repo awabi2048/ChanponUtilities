@@ -9,6 +9,8 @@ internal object GuideRouteMigration {
         var changed = false
         for (id in routes.getKeys(false)) {
             val route = routes.getConfigurationSection(id) ?: continue
+            val rawList = route.getList("points")
+            require(rawList == null || rawList.all { it is Map<*, *> }) { "routes.$id.points は地点の一覧で指定してください" }
             val points = route.getMapList("points").map { raw ->
                 val copy = raw.entries.associate { it.key.toString() to it.value }.toMutableMap()
                 when (val message = copy["message"]) {
@@ -22,6 +24,7 @@ internal object GuideRouteMigration {
                 copy
             }
             val midpoints = route.getConfigurationSection("midpoints")
+            require(!route.contains("midpoints") || midpoints != null) { "routes.$id.midpoints が不正です" }
             if (midpoints != null) {
                 val byIndex = midpoints.getKeys(false).associate { key ->
                     val index = key.toIntOrNull()

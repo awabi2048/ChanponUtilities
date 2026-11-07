@@ -51,6 +51,13 @@ class GuideRouteStore(
         val yaml = YamlConfiguration()
         runCatching { yaml.load(filePath.toFile()) }
             .onFailure { return LoadResult.Invalid(listOf("guide_routes.yml の読み込みに失敗しました: ${it.message}")) }
+        val migrated = runCatching { GuideRouteMigration.migrate(yaml.getConfigurationSection("routes")) }
+            .getOrElse { return LoadResult.Invalid(listOf("旧ルートの変換に失敗しました: ${it.message}")) }
+        if (migrated) {
+            val checked = GuideRouteCodec.parse(yaml.getConfigurationSection("routes"))
+            if (checked is GuideRouteCodec.ParseResult.Failure) return LoadResult.Invalid(checked.errors)
+            runCatching { saveYaml(yaml) }.onFailure { return LoadResult.Invalid(listOf("変換したルートの保存に失敗しました: ${it.message}")) }
+        }
         return adopt(yaml)
     }
 
@@ -132,23 +139,6 @@ class GuideRouteStore(
             ?: return SetPointResult.Failed("re-validation after save failed")
         val route = find(routeId) ?: return SetPointResult.Failed("route missing after save")
         return SetPointResult.Saved(route, index, appended = index > size)
-    }
-
-    /** 中継点間の通過点を保存します。中継点の番号は変えません。 */
-    @Synchronized
-    fun setMidpoint(routeId: String, index: Int, worldName: String, x: Double, y: Double, z: Double): Boolean {
-        val route = find(routeId) ?: return false
-        if (route.worldName != worldName || index < 1 || index >= route.points.size) return false
-        val yaml = YamlConfiguration()
-        yaml.load(filePath.toFile())
-        val routeSection = yaml.getConfigurationSection("routes")?.getConfigurationSection(routeId) ?: return false
-        val midpoints = routeSection.getConfigurationSection("midpoints") ?: routeSection.createSection("midpoints")
-        // 小数点を含む識別子はパス区切りと混同しないよう、区間番号を階層として保存します。
-        val node = midpoints.getConfigurationSection(index.toString()) ?: midpoints.createSection(index.toString())
-        node.set("x", x); node.set("y", y); node.set("z", z)
-        if (GuideRouteCodec.parse(yaml.getConfigurationSection("routes")) is GuideRouteCodec.ParseResult.Failure) return false
-        saveYaml(yaml)
-        return adopt(yaml) is LoadResult.Loaded
     }
 
     private fun pointToMap(point: GuidePoint): Map<String, Any> = linkedMapOf(

@@ -1,7 +1,7 @@
 package me.awabi2048.chanponutilities.guide
 
 /** delay がない行は地点で、ある行は出発後の指定 tick に送信します。 */
-internal data class GuideMessageLine(val text: String, val delay: Long?) {
+data class GuideMessageLine(val text: String, val delay: Long?) {
     companion object {
         fun parse(raw: Map<*, *>): GuideMessageLine? {
             val text = raw["text"] as? String ?: return null

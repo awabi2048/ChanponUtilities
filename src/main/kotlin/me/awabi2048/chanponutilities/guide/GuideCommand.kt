@@ -128,16 +128,6 @@ class GuideCommand(
                 }
                 val routeId = args.getOrNull(1)
                 val indexText = args.getOrNull(2)
-                val midpoint = Regex("([1-9][0-9]*)\\.5").matchEntire(indexText ?: "")?.groupValues?.get(1)?.toIntOrNull()
-                if (routeId != null && midpoint != null) {
-                    val loc = player.location
-                    if (routeStore.setMidpoint(routeId, midpoint, loc.world.name, loc.x, loc.y, loc.z)) {
-                        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ADMIN_SETPOINT_SAVED, "route" to routeId, "index" to "$midpoint.5"))
-                    } else {
-                        player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ADMIN_INVALID_INDEX, "index" to "$midpoint.5"))
-                    }
-                    return
-                }
                 val index = indexText?.toIntOrNull()
                 if (routeId == null || index == null) {
                     sender.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_GUIDE_ADMIN_USAGE))
@@ -250,7 +240,7 @@ class GuideCommand(
             4 -> when {
                 args[0].equals("admin", true) && args[1].equals("setpoint", true) && sender.hasPermission(ADMIN_PERMISSION) -> {
                     val size = routeStore.find(args[2])?.points?.size ?: 0
-                    ((1..size + 1).map(Int::toString) + (1 until size).map { "$it.5" }).filter { it.startsWith(args[3]) }
+                    (1..size + 1).map(Int::toString).filter { it.startsWith(args[3]) }
                 }
                 args[0].equals("admin", true) && args[1].equals("resetauto", true) && sender.hasPermission(ADMIN_PERMISSION) ->
                     (listOf("@p") + org.bukkit.Bukkit.getOnlinePlayers().map { it.name }).filter { it.startsWith(args[3], true) }

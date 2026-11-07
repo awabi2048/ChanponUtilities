@@ -17,13 +17,19 @@ class GuideMidpointTest {
                 midpoints:
                   '$index': {x: 5, y: 65, z: 3}
         """.trimIndent())
-        return GuideRouteCodec.parse(yaml.getConfigurationSection("routes"))
+        return try {
+            GuideRouteMigration.migrate(yaml.getConfigurationSection("routes"))
+            GuideRouteCodec.parse(yaml.getConfigurationSection("routes"))
+        } catch (error: IllegalArgumentException) {
+            GuideRouteCodec.ParseResult.Failure(listOf(error.message ?: "invalid"))
+        }
     }
-    @Test fun `midpoint keeps the waypoint numbering unchanged`() {
+    @Test fun `old midpoint becomes an intermediate point`() {
         val result = routes("1") as GuideRouteCodec.ParseResult.Success
         val route = result.routes.getValue("sample")
-        assertEquals(2, route.points.size)
-        assertEquals(5.0, route.midpoints.getValue(1).x)
+        assertEquals(3, route.points.size)
+        assertEquals(5.0, route.points[1].x)
+        assertFalse(route.points[1].isStop)
     }
     @Test fun `midpoint after last waypoint is invalid`() {
         assertTrue(routes("2") is GuideRouteCodec.ParseResult.Failure)

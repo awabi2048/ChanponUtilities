@@ -15,4 +15,17 @@ class GuideTravelMessagesTest {
         assertEquals(listOf("later"), messages.tick(true))
         assertTrue(messages.isEmpty)
     }
+
+    @Test fun `speed cap reaches destination when final delayed line is sent`() {
+        val messages = GuideTravelMessages(listOf(GuideMessageLine("last", 100)))
+        var distance = 10.0
+        repeat(99) {
+            distance -= GuideDelayedMessageTiming.maximumStep(distance, messages.remainingTicks, 0.2)
+            assertTrue(messages.tick(true).isEmpty())
+            assertTrue(distance > 0.0)
+        }
+        distance -= GuideDelayedMessageTiming.maximumStep(distance, messages.remainingTicks, 0.2)
+        assertEquals(listOf("last"), messages.tick(true))
+        assertEquals(0.0, distance, 1e-8)
+    }
 }

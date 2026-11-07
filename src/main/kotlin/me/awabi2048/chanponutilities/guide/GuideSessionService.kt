@@ -64,6 +64,8 @@ class GuideSessionService(
 
         /** プレイヤーがコースへ復帰し、アレイが中継点へ帰還中です。 */
         RETURNING,
+        /** 最終地点で、出発先のない遅延メッセージを待ちます。 */
+        FINAL_DELAY,
     }
 
     private class GuideSession(
@@ -71,6 +73,8 @@ class GuideSessionService(
         val route: GuideRoute,
         var entityId: Int,
         var nextIndex: Int,
+        var fromIndex: Int = 0,
+        var travelMessages: GuideTravelMessages? = null,
         var x: Double,
         var y: Double,
         var z: Double,
@@ -241,7 +245,7 @@ class GuideSessionService(
             Phase.WAITING -> Unit
             Phase.FOLLOWING -> Unit
             // 飛行中・帰還中のアレイはクリックを受け付けません。
-            Phase.APPEARING, Phase.FLYING, Phase.RETURNING -> Unit
+            Phase.APPEARING, Phase.FLYING, Phase.RETURNING, Phase.FINAL_DELAY -> Unit
         }
     }
 
@@ -253,15 +257,24 @@ class GuideSessionService(
     }
 
     private fun advanceWaypoint(session: GuideSession) {
+        val currentPoint = session.route.points[session.nextIndex]
+        session.travelMessages = GuideTravelMessages(currentPoint.delayedMessages)
+        sendTravelMessages(session, session.travelMessages!!.departure())
         session.waypointProgress = null
         session.relocatedDuringMessageWait = false
-        session.nextIndex++
+        session.fromIndex = session.nextIndex
+        val next = GuideStopPlan.nextStopIndex(session.fromIndex, session.route.points.map { it.isStop })
         session.offCourseTicks = 0
-        if (session.nextIndex >= session.route.points.size) {
-            session.ended = true
-            beginDeparture(session)
+        if (next == null) {
+            if (session.travelMessages?.isEmpty == false) {
+                session.phase = Phase.FINAL_DELAY
+            } else {
+                session.ended = true
+                beginDeparture(session)
+            }
 
         } else {
+            session.nextIndex = next
             session.phase = Phase.FLYING
             session.flight = planFlight(session, session.route.points[session.nextIndex])
             session.coursePath = session.flight
@@ -271,14 +284,18 @@ class GuideSessionService(
 
     /** 中間点を通り、通過できることを確認した経路だけを返します。 */
     private fun planFlight(session: GuideSession, target: GuidePoint): GuideCourseMath.FlightPath? {
-        val midpoint = session.route.midpoints[session.nextIndex]
         val start = Triple(session.x, session.y, session.z)
         val end = Triple(target.x, target.y, target.z)
-        if (midpoint == null || session.phase != Phase.FLYING) return findPath(session, start, end)
-        val via = Triple(midpoint.x, midpoint.y, midpoint.z)
-        val first = findRawPath(session, start, via) ?: return null
-        val second = findRawPath(session, via, end) ?: return null
-        val knots = first + second.drop(1)
+        if (session.phase != Phase.FLYING) return findPath(session, start, end)
+        val knots = mutableListOf(start)
+        var previous = start
+        for (i in session.fromIndex + 1..session.nextIndex) {
+            val point = session.route.points[i]
+            val via = Triple(point.x, point.y, point.z)
+            val segment = findRawPath(session, previous, via) ?: return null
+            knots.addAll(segment.drop(1))
+            previous = via
+        }
         return GuideSmoothPath.build(knots) { x, y, z -> canOccupyPath(session.player.world, x, y, z) }?.let(GuideCourseMath.FlightPath::of)
     }
 
@@ -338,7 +355,10 @@ class GuideSessionService(
         renderer.sendScale(session.player, session.entityId, frame.scale)
         renderer.moveTo(session.player, session.entityId, point.x, frame.y, point.z, frame.yaw, point.pitch)
         if (tick == 1) renderer.reveal(session.player, session.entityId)
-        if (tick >= GuideLifecycleAnimation.DURATION_TICKS) session.phase = Phase.WAITING
+        if (tick >= GuideLifecycleAnimation.DURATION_TICKS) {
+            session.phase = Phase.WAITING
+            if (!point.isStop) advanceWaypoint(session)
+        }
     }
 
     private fun tick(session: GuideSession) {
@@ -387,6 +407,13 @@ class GuideSessionService(
             Phase.WAITING -> tickWaiting(session)
             Phase.FLYING, Phase.RETURNING -> tickFlight(session)
             Phase.FOLLOWING -> tickFollowing(session)
+            Phase.FINAL_DELAY -> {
+                // 終点には移動区間がないため、例外として静止中に遅延を進めます。
+                session.travelMessages?.let { messages ->
+                    sendTravelMessages(session, messages.tick(true))
+                    if (messages.isEmpty) { session.ended = true; beginDeparture(session) }
+                }
+            }
         }
         if (session.ended) return
         checkOffCourse(session)
@@ -435,7 +462,7 @@ class GuideSessionService(
         session.distanceWait.reset()
         session.anchorValid = false
         session.pathRetryTicks = 0
-        if (session.phase == Phase.FOLLOWING) return
+        if (session.phase == Phase.FOLLOWING || session.phase == Phase.FINAL_DELAY) return
         if (session.phase == Phase.WAITING && session.waypointProgress?.messageSent == true) {
             // メッセージ送信後の無条件待機は移動後も中断しません。
             session.relocatedDuringMessageWait = true
@@ -602,6 +629,13 @@ class GuideSessionService(
         if (event.advance) advanceWaypoint(session)
     }
 
+    private fun sendTravelMessages(session: GuideSession, lines: List<String>) {
+        for (line in lines) {
+            session.player.sendMessage(ChanponI18n.colorize(line))
+            session.player.playSound(session.player.location, Sound.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.8f, 0.98f)
+        }
+    }
+
     /**
      * 計画した曲線経路に沿って飛行し、進行方向を向きます。
      * FLYING は次の中継点、RETURNING はコース復帰後の中継点へ向かいます。
@@ -619,17 +653,23 @@ class GuideSessionService(
         }
         session.pathRetryTicks = 0
         val previous = Triple(session.x, session.y, session.z)
-        val pos = flight.advance(flightStep(session, flight, speed))
+        val ordinaryStep = flightStep(session, flight, speed)
+        val remaining = (flight.totalLength - flight.traveled).coerceAtLeast(0.0)
+        val step = GuideDelayedMessageTiming.maximumStep(remaining, session.travelMessages?.remainingTicks ?: 0L, ordinaryStep)
+        val traveledBefore = flight.traveled
+        val pos = flight.advance(step)
         session.x = pos.first
         session.y = pos.second
         session.z = pos.third
         session.movingThisTick = !flight.finished
+        val moved = flight.traveled > traveledBefore
+        session.travelMessages?.let { sendTravelMessages(session, it.tick(moved)) }
 
         val (yaw, pitch) = GuideCourseMath.lookAngles(previous.first, previous.second, previous.third, session.x, session.y, session.z)
         val bob = bobOffset(session)
         renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
 
-        if (flight.finished) {
+        if (flight.finished && (session.travelMessages?.isEmpty != false)) {
             session.x = target.x
             session.y = target.y
             session.z = target.z
@@ -637,6 +677,7 @@ class GuideSessionService(
             session.speedPerTick = 0.0
             session.phase = Phase.WAITING
             renderer.moveTo(session.player, session.entityId, session.x, session.y + bob, session.z, yaw, pitch)
+            if (!target.isStop) advanceWaypoint(session)
         }
     }
 
@@ -655,6 +696,7 @@ class GuideSessionService(
         val flight = session.flight
         val previous = Triple(session.x, session.y, session.z)
         if (flight != null) {
+            val traveledBefore = flight.traveled
             // 追従時はプレイヤーとの直線距離に比例し、遠いほど速く接近します。
             val player = session.player.location
             val distance = kotlin.math.sqrt(GuideCourseMath.distanceSq(
@@ -664,6 +706,7 @@ class GuideSessionService(
             session.y = pos.second
             session.z = pos.third
             session.movingThisTick = !flight.finished
+            session.travelMessages?.let { sendTravelMessages(session, it.tick(flight.traveled > traveledBefore)) }
         }
 
         // 移動中は進行方向を向き、静止中はプレイヤーを向きます。
@@ -786,9 +829,10 @@ class GuideSessionService(
      * 1点目の完了前は「現在区間」が未定義のため、逸脱判定を行いません。
      */
     private fun checkOffCourse(session: GuideSession) {
+        if (session.phase == Phase.FINAL_DELAY) return
         if (session.nextIndex == 0 || session.nextIndex >= session.route.points.size || session.waypointProgress?.messageSent == true) return
         val player = session.player
-        val prev = session.route.points[session.nextIndex - 1]
+        val prev = session.route.points[session.fromIndex]
         val next = session.route.points[session.nextIndex]
         val loc = player.location
         val points = session.coursePath?.points ?: listOf(
