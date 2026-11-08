@@ -48,6 +48,9 @@ object GuideCourseMath {
     /** 全状態で32ブロック以上離れたアレイをプレイヤー付近へ再配置します。 */
     fun shouldTeleport(distanceSquared: Double): Boolean = distanceSquared >= 32.0 * 32.0
 
+    /** プレイヤーがアレイより直前の停止地点に近い場合だけ、距離待機の対象にします。 */
+    fun playerBehind(playerDistanceSquared: Double, allayDistanceSquared: Double): Boolean = playerDistanceSquared < allayDistanceSquared
+
     /** 追従速度はプレイヤーまでの距離の3分の1 [ブロック/秒] です。 */
     fun followSpeed(distance: Double): Double = distance / 3.0
 

@@ -48,6 +48,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     private var linkStore: LecternBookshelfLinkStore? = null
     private var myWorldManagerIntegration: AutoCloseable? = null
     private var freecamSessionService: FreecamSessionService? = null
+    private var tourModeListener: TourModeListener? = null
     private var tourSafetyService: TourSafetyService? = null
     private var commandSafeguardService: CommandSafeguardService? = null
     private var guideSessionService: GuideSessionService? = null
@@ -280,7 +281,10 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             } else {
                 StandingPoseCaptureService()
             }
-            val freecam = FreecamSessionService(this, poseCaptureService)
+            val freecam = FreecamSessionService(this, poseCaptureService) { player ->
+                // 復元直後の保存値より、観光モードと現在のワールド設定を優先します。
+                tourModeListener?.later(player)
+            }
             freecamSessionService = freecam
             val interactionClaims = CCSystem.getAPI().getPlayerInteractionClaimService()
             server.pluginManager.registerEvents(
@@ -360,7 +364,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             logger.info("MyWorldManager is unavailable; player-state integration is disabled.")
         }
         if (isModuleEnabled(ChanponModule.TOUR_MODE)) {
-            val tour = TourModeListener(this)
+            val tour = TourModeListener(this) { playerId -> freecamSessionService?.isActive(playerId) == true }
+            tourModeListener = tour
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
             if (server.pluginManager.isPluginEnabled("WorldGuard")) {
@@ -386,6 +391,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     private fun stopPlugin() {
         lifecycleActive = false
+        tourModeListener = null
         HandlerList.unregisterAll(this)
         server.scheduler.cancelTasks(this)
         commandSafeguardService?.shutdown()

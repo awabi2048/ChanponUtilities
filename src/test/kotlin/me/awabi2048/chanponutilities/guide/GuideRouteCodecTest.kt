@@ -14,8 +14,39 @@ class GuideRouteCodecTest {
         return yaml
     }
 
-    private fun parse(text: String): GuideRouteCodec.ParseResult =
-        GuideRouteCodec.parse(yamlOf(text).getConfigurationSection("routes"))
+    private fun parse(text: String): GuideRouteCodec.ParseResult {
+        val routes = yamlOf(text).getConfigurationSection("routes")
+        GuideRouteMigration.migrate(routes)
+        return GuideRouteCodec.parse(routes)
+    }
+
+    @Test fun `parses delayed rows and treats empty messages as intermediate`() {
+        val result = parse("""
+            routes:
+              tour:
+                world: world
+                points:
+                  - {x: 0, y: 64, z: 0, yaw: 0, pitch: 0, message: [{text: immediate}, {text: later, delay: 3}]}
+                  - {x: 1, y: 64, z: 0, yaw: 0, pitch: 0, message: []}
+        """.trimIndent()) as GuideRouteCodec.ParseResult.Success
+        val points = result.routes.getValue("tour").points
+        assertEquals(listOf("immediate"), points[0].message)
+        assertEquals(listOf(GuideMessageLine("later", 3)), points[0].delayedMessages)
+        assertTrue(points[0].isStop)
+        assertTrue(!points[1].isStop)
+    }
+
+    @Test fun `rejects positive movement delay for a zero length segment`() {
+        val result = parse("""
+            routes:
+              tour:
+                world: world
+                points:
+                  - {x: 0, y: 64, z: 0, yaw: 0, pitch: 0, message: [{text: later, delay: 3}]}
+                  - {x: 0, y: 64, z: 0, yaw: 0, pitch: 0}
+        """.trimIndent())
+        assertTrue(result is GuideRouteCodec.ParseResult.Failure)
+    }
 
     @Test
     fun `parses a route with waypoints and messages`() {

@@ -20,7 +20,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class FreecamSessionService(
     private val plugin: ChanponUtilitiesPlugin,
-    private val poseCaptureService: FreecamPoseCaptureService
+    private val poseCaptureService: FreecamPoseCaptureService,
+    private val onPlayerRestored: (Player) -> Unit,
 ) {
     private val sessions = ConcurrentHashMap<UUID, FreecamSession>()
     private val monitorTasks = ConcurrentHashMap<UUID, ScheduledTask>()
@@ -128,6 +129,8 @@ class FreecamSessionService(
                 player.gameMode = session.snapshot.originalGameMode
                 player.allowFlight = session.snapshot.allowFlight
                 player.isFlying = session.snapshot.flying && session.snapshot.allowFlight
+                // 保存値の復元だけでは、観光モードや現在のワールド設定と食い違う場合があります。
+                onPlayerRestored(player)
                 player.fallDistance = 0f
                 if (notify && reason == FreecamExitReason.BODY_DAMAGED) {
                     player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_BODY_DAMAGED))
@@ -151,6 +154,7 @@ class FreecamSessionService(
         player.gameMode = entry.gameMode
         player.allowFlight = entry.allowFlight
         player.isFlying = entry.flying && entry.allowFlight
+        onPlayerRestored(player)
         player.fallDistance = 0f
         recovery.remove(player.uniqueId)
         player.sendMessage(ChanponI18n.text(player, Keys.CHANPON_UTILITIES_FREECAM_RECOVERED))

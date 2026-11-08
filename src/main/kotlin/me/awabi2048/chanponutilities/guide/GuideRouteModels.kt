@@ -16,7 +16,10 @@ data class GuidePoint(
     val yaw: Float,
     val pitch: Float,
     val message: List<String> = emptyList(),
-)
+    val delayedMessages: List<GuideMessageLine> = emptyList(),
+) {
+    val isStop: Boolean get() = message.isNotEmpty() || delayedMessages.isNotEmpty()
+}
 
 /** ワールド内の向かい合う頂点で表す自動開始領域です。境界を含みます。 */
 data class GuideAutoStartArea(
@@ -40,7 +43,6 @@ data class GuideRoute(
     val worldName: String,
     val displayName: String?,
     val points: List<GuidePoint>,
-    val midpoints: Map<Int, GuidePoint> = emptyMap(),
     val autoStart: GuideAutoStartArea? = null,
 ) {
     /** コマンド表示・完了メッセージに使う名前です。 */
@@ -96,34 +98,28 @@ object GuideRouteCodec {
             val pitch = raw["pitch"] as? Number ?: run { errors += "$path.pitch must be a number"; 0.0 }
             val message = when (val rawMessage = raw["message"]) {
                 null -> emptyList()
-                is String -> listOf(rawMessage)
                 is List<*> -> rawMessage.map { line ->
-                    line as? String ?: run { errors += "$path.message must contain only strings"; "" }
+                    (line as? Map<*, *>)?.let(GuideMessageLine::parse)
+                        ?: run { errors += "$path.message は text と任意の非負整数 delay で指定してください"; GuideMessageLine("", null) }
                 }
-                else -> run { errors += "$path.message must be a string or list of strings"; emptyList() }
+                else -> run { errors += "$path.message must be a list"; emptyList() }
             }
             GuidePoint(
                 x.toDouble(), y.toDouble(), z.toDouble(),
                 yaw.toFloat(), pitch.toFloat().coerceIn(-90f, 90f),
-                message,
+                message.filter { it.delay == null }.map { it.text },
+                message.filter { it.delay != null },
             )
         }
-        // キー 3.5 は3番と4番の中継点の間の通過点を表します。
-        val midpoints = linkedMapOf<Int, GuidePoint>()
-        section.getConfigurationSection("midpoints")?.let { mid ->
-            for (key in mid.getKeys(false)) {
-                val index = key.toIntOrNull()
-                val node = mid.getConfigurationSection(key)
-                val x = node?.get("x") as? Number
-                val y = node?.get("y") as? Number
-                val z = node?.get("z") as? Number
-                if (index == null || index >= points.size || x == null || y == null || z == null ||
-                    !x.toDouble().isFinite() || !y.toDouble().isFinite() || !z.toDouble().isFinite()) {
-                    errors += "routes.$id.midpoints.$key は隣接する中継点間の有限座標で指定してください"
-                } else {
-                    midpoints[index] = GuidePoint(x.toDouble(), y.toDouble(), z.toDouble(), 0f, 0f)
-                }
+        // 正の遅延は移動中だけ進むため、移動距離がない区間では配信が永久に終わりません。
+        for (i in points.indices) {
+            if (points[i].delayedMessages.none { (it.delay ?: 0L) > 0L }) continue
+            val end = GuideStopPlan.nextStopIndex(i, points.map { it.isStop }) ?: continue
+            val hasMovement = (i until end).any { n ->
+                val a = points[n]; val b = points[n + 1]
+                GuideCourseMath.distanceSq(a.x, a.y, a.z, b.x, b.y, b.z) > 1.0e-12
             }
+            if (!hasMovement) errors += "routes.$id.points[$i] の遅延配信には移動距離が必要です"
         }
         // 自動開始は省略可能ですが、指定した場合は全頂点とワールドを厳密に検証します。
         var autoStart: GuideAutoStartArea? = null
@@ -149,7 +145,7 @@ object GuideRouteCodec {
             }
         }
         if (errors.isNotEmpty()) return ParseResult.Failure(errors)
-        return ParseResult.Success(mapOf(id to GuideRoute(id, world!!, displayName, points, midpoints, autoStart)))
+        return ParseResult.Success(mapOf(id to GuideRoute(id, world!!, displayName, points, autoStart)))
     }
 
     /** 中継点を YAML セクションへ書き戻します。既存の message は保持されます。 */
