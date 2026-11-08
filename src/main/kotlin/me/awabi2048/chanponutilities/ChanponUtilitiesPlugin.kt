@@ -283,6 +283,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             }
             val freecam = FreecamSessionService(this, poseCaptureService) { player ->
                 // 復元直後の保存値より、観光モードと現在のワールド設定を優先します。
+                if (server.pluginManager.isPluginEnabled("MyWorldManager")) TourModeWorlds.restore(player)
                 tourModeListener?.later(player)
             }
             freecamSessionService = freecam
