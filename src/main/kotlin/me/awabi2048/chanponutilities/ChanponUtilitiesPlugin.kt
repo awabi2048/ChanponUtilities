@@ -33,6 +33,7 @@ import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
 import me.awabi2048.chanponutilities.tour.TourModeListener
 import me.awabi2048.chanponutilities.tour.TourModeWorlds
 import me.awabi2048.chanponutilities.tour.TourInteractionListener
+import me.awabi2048.chanponutilities.tour.TourMobEggProtection
 import me.awabi2048.chanponutilities.tour.TourWorldGuardListener
 import me.awabi2048.chanponutilities.tour.isTourAdmin
 import org.bukkit.Bukkit
@@ -369,6 +370,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             tourModeListener = tour
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
+            server.pluginManager.registerEvents(TourMobEggProtection(), this)
             if (server.pluginManager.isPluginEnabled("WorldGuard")) {
                 server.pluginManager.registerEvents(TourWorldGuardListener(), this)
             }
