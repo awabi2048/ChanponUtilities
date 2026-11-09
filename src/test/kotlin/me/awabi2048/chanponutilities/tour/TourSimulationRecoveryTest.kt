@@ -3,6 +3,7 @@ package me.awabi2048.chanponutilities.tour
 import org.bukkit.GameMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
@@ -20,5 +21,14 @@ class TourSimulationRecoveryTest {
         assertEquals(GameMode.CREATIVE, restarted.get(player))
         restarted.forget(player)
         assertNull(TourSimulationRecovery(file).get(player))
+    }
+
+    @Test
+    fun `保存失敗後も復元データを保存済みと誤認しない`(@TempDir directory: Path) {
+        val parent = directory.resolve("not-a-directory").toFile().also { it.writeText("x") }
+        val recovery = TourSimulationRecovery(parent.resolve("state.yml"))
+        val player = UUID.randomUUID()
+        assertThrows(Exception::class.java) { recovery.remember(player, GameMode.CREATIVE) }
+        assertNull(recovery.get(player))
     }
 }
