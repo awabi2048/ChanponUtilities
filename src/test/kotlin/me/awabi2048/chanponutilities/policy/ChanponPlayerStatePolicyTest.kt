@@ -82,6 +82,15 @@ class ChanponPlayerStatePolicyTest {
     }
 
     @Test
+    fun `シミュレーションの飛行判定は対象ワールドだけに適用する`() {
+        val simulated = worldData()
+        val normal = worldData()
+        val policy = ChanponPlayerStatePolicy { _, world -> world.uuid == simulated.uuid }
+        assertEquals(true, policy.evaluate(player(guest, admin = false), simulated).flightAllowed)
+        assertEquals(false, policy.evaluate(player(guest, admin = false), normal).flightAllowed)
+    }
+
+    @Test
     fun `policy id is stable for canBuildInWorld composition`() {
         assertTrue(ChanponPlayerStatePolicy.POLICY_ID.isNotBlank())
     }
