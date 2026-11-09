@@ -8,10 +8,10 @@ import org.bukkit.event.Listener
 import org.bukkit.event.entity.EntityInteractEvent
 
 /** 観光期間中はMobの踏みつけやゾンビの卵破壊からカメの卵を守ります。 */
-internal class TourMobEggProtection : Listener {
+internal class TourMobEggProtection(private val isActive: (org.bukkit.World) -> Boolean = { true }) : Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onInteract(event: EntityInteractEvent) {
-        if (event.entity is Mob && event.block.type == Material.TURTLE_EGG) {
+        if (event.entity is Mob && event.block.type == Material.TURTLE_EGG && isActive(event.block.world)) {
             event.isCancelled = true
         }
     }

@@ -5,7 +5,7 @@ import me.awabi2048.myworldmanager.api.extension.WorldPlayerStatePolicy
 import me.awabi2048.myworldmanager.model.WorldData
 import org.bukkit.entity.Player
 
-class ChanponPlayerStatePolicy(private val tourMode: () -> Boolean = { false }) : WorldPlayerStatePolicy {
+class ChanponPlayerStatePolicy(private val tourMode: (Player, WorldData) -> Boolean = { _, _ -> false }) : WorldPlayerStatePolicy {
     override fun getId(): String = POLICY_ID
 
     override fun getPriority(): Int = 10
@@ -19,7 +19,7 @@ class ChanponPlayerStatePolicy(private val tourMode: () -> Boolean = { false }) 
         // 保護モード（PUBLIC 等）を参照しない拒否が WorldGuard の許可を上書きするのを防ぎます。
         return WorldPlayerStateDecision(
             buildAllowed = null,
-            flightAllowed = if (tourMode() && !admin) worldData.allowFlight
+            flightAllowed = if (tourMode(player, worldData) && !admin) worldData.allowFlight
             else ChanponPlayerStateRules.flightAllowed(worldData.allowFlight, builder, admin)
         )
     }

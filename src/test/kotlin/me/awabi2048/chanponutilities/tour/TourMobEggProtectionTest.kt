@@ -2,6 +2,7 @@ package me.awabi2048.chanponutilities.tour
 
 import java.lang.reflect.Proxy
 import org.bukkit.Material
+import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Mob
@@ -17,7 +18,8 @@ class TourMobEggProtectionTest {
 
     private fun interaction(entityType: Class<out Entity>, material: Material): EntityInteractEvent {
         val entity = proxy(entityType) { error("想定外のエンティティ操作: $it") }
-        val block = proxy(Block::class.java) { if (it == "getType") material else error("想定外のブロック操作: $it") }
+        val world = proxy(World::class.java) { error("想定外のワールド操作: $it") }
+        val block = proxy(Block::class.java) { when (it) { "getType" -> material; "getWorld" -> world; else -> error("想定外のブロック操作: $it") } }
         return EntityInteractEvent(entity, block)
     }
 
@@ -30,5 +32,8 @@ class TourMobEggProtectionTest {
         assertTrue(mobEgg.isCancelled)
         assertFalse(mobOther.isCancelled)
         assertFalse(nonMobEgg.isCancelled)
+        val inactive = interaction(Mob::class.java, Material.TURTLE_EGG)
+        TourMobEggProtection { false }.onInteract(inactive)
+        assertFalse(inactive.isCancelled)
     }
 }

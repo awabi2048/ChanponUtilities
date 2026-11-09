@@ -74,7 +74,7 @@ class ChanponPlayerStatePolicyTest {
 
     @Test
     fun `観光中は訪問者も飛行できるがワールドの飛行禁止は維持する`() {
-        val policy = ChanponPlayerStatePolicy { true }
+        val policy = ChanponPlayerStatePolicy { _, _ -> true }
         val world = worldData()
         assertEquals(true, policy.evaluate(player(guest, admin = false), world).flightAllowed)
         world.allowFlight = false

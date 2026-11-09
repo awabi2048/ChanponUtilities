@@ -81,6 +81,14 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
 
     internal fun isModuleEnabled(module: ChanponModule): Boolean = moduleState.isEnabled(module)
 
+    /** 全体観光と外部のワールド単位シミュレーションを同じ入口で合成します。 */
+    internal fun isTourActive(world: org.bukkit.World): Boolean =
+        isModuleEnabled(ChanponModule.TOUR_MODE) ||
+            server.servicesManager.load(me.awabi2048.chanponutilities.api.TourSimulationProvider::class.java)?.isSimulated(world) == true
+
+    internal fun isTourSimulationActive(world: org.bukkit.World): Boolean =
+        server.servicesManager.load(me.awabi2048.chanponutilities.api.TourSimulationProvider::class.java)?.isSimulated(world) == true
+
     internal fun currentModuleState(): ChanponModuleState = moduleState
 
     internal fun isModuleUnavailable(module: ChanponModule): Boolean = when {
@@ -365,14 +373,14 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         } else if (!server.pluginManager.isPluginEnabled("MyWorldManager")) {
             logger.info("MyWorldManager is unavailable; player-state integration is disabled.")
         }
-        if (isModuleEnabled(ChanponModule.TOUR_MODE)) {
+        run {
             val tour = TourModeListener(this) { playerId -> freecamSessionService?.isActive(playerId) == true }
             tourModeListener = tour
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
-            server.pluginManager.registerEvents(TourMobEggProtection(), this)
+            server.pluginManager.registerEvents(TourMobEggProtection(::isTourActive), this)
             if (server.pluginManager.isPluginEnabled("WorldGuard")) {
-                server.pluginManager.registerEvents(TourWorldGuardListener(), this)
+                server.pluginManager.registerEvents(TourWorldGuardListener(this), this)
             }
             // 有効化コマンドの完了を待たず、接続中の利用者へ現在の状態を適用します。
             server.onlinePlayers.forEach(tour::sync)
