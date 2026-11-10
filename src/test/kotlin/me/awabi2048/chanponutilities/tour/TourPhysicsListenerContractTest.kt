@@ -65,10 +65,16 @@ class TourPhysicsListenerContractTest {
         assertTrue(destroy.isCancelled)
         assertFalse(physics(diagonal).isCancelled)
         assertFalse(physics(wire).isCancelled)
-        pending.forEach { it() }
+        listener.onInteract(interact(lever))
+        pending.removeAt(0).invoke()
+        assertTrue(physics(lantern).isCancelled)
+        pending.removeAt(0).invoke()
         assertFalse(physics(lantern).isCancelled)
         val denied = interact(lever).also { it.setUseInteractedBlock(Event.Result.DENY) }
         listener.onInteract(denied)
+        assertFalse(physics(lantern).isCancelled)
+        val inactive = TourAdjacentPhysicsListener({ false }, { pending.add(it) })
+        inactive.onInteract(interact(lever))
         assertFalse(physics(lantern).isCancelled)
     }
 
@@ -103,9 +109,10 @@ class TourPhysicsListenerContractTest {
             }
         }
         val location = Location(fakeWorld, 0.5, 64.0, 0.5)
+        var firstOnline = true
         val person = proxy(Player::class.java) {
             when (it) {
-                "getGameMode" -> GameMode.ADVENTURE; "isDead" -> false; "isOnline" -> true
+                "getGameMode" -> GameMode.ADVENTURE; "isDead" -> false; "isOnline" -> firstOnline
                 "getUniqueId" -> id; "getLocation" -> location; else -> error("player.$it")
             }
         }
@@ -122,5 +129,18 @@ class TourPhysicsListenerContractTest {
         allowed.onMove(move)
         pending.removeAt(0).invoke()
         assertEquals(1, ticks)
+        val secondId = UUID.randomUUID()
+        val second = proxy(Player::class.java) {
+            when (it) {
+                "getGameMode" -> GameMode.ADVENTURE; "isDead" -> false; "isOnline" -> true
+                "getUniqueId" -> secondId; "getLocation" -> location; else -> error("player.$it")
+            }
+        }
+        allowed.onMove(move)
+        allowed.onMove(PlayerMoveEvent(second, from, location))
+        firstOnline = false
+        pending.removeAt(0).invoke()
+        pending.removeAt(0).invoke()
+        assertEquals(2, ticks)
     }
 }
