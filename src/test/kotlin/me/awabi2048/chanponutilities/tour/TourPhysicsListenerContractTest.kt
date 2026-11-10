@@ -50,35 +50,6 @@ class TourPhysicsListenerContractTest {
     )
 
     @Test
-    fun `観光操作の直後だけ隣接装飾の物理更新を止め回路は通す`() {
-        val pending = mutableListOf<() -> Unit>()
-        val listener = TourAdjacentPhysicsListener({ true }, { pending.add(it) })
-        val lever = block(0, 64, Material.LEVER)
-        val lantern = block(1, 64, Material.LANTERN)
-        val diagonal = block(1, 65, Material.LANTERN)
-        val wire = block(-1, 64, Material.REDSTONE_WIRE)
-        listener.onInteract(interact(lever))
-        fun physics(block: Block) = BlockPhysicsEvent(block, block.blockData, lever).also(listener::onPhysics)
-        assertTrue(physics(lantern).isCancelled)
-        val destroy = BlockDestroyEvent(lantern, lantern.blockData, lantern.blockData, 0, false)
-        listener.onDestroy(destroy)
-        assertTrue(destroy.isCancelled)
-        assertFalse(physics(diagonal).isCancelled)
-        assertFalse(physics(wire).isCancelled)
-        listener.onInteract(interact(lever))
-        pending.removeAt(0).invoke()
-        assertTrue(physics(lantern).isCancelled)
-        pending.removeAt(0).invoke()
-        assertFalse(physics(lantern).isCancelled)
-        val denied = interact(lever).also { it.setUseInteractedBlock(Event.Result.DENY) }
-        listener.onInteract(denied)
-        assertFalse(physics(lantern).isCancelled)
-        val inactive = TourAdjacentPhysicsListener({ false }, { pending.add(it) })
-        inactive.onInteract(interact(lever))
-        assertFalse(physics(lantern).isCancelled)
-    }
-
-    @Test
     fun `既に押されたボタンは復帰するが通常の通電中や拒否操作には触れない`() {
         var ticks = 0
         val button = block(0, 64, Material.STONE_BUTTON, powered = true) { ticks++ }

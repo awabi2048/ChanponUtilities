@@ -374,7 +374,6 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             logger.info("MyWorldManager is unavailable; player-state integration is disabled.")
         }
         run {
-            server.pluginManager.registerEvents(me.awabi2048.chanponutilities.tour.TourAdjacentPhysicsListener(this), this)
             server.pluginManager.registerEvents(me.awabi2048.chanponutilities.tour.StuckPoweredControlListener(this), this)
             val tour = TourModeListener(this) { playerId -> freecamSessionService?.isActive(playerId) == true }
             tourModeListener = tour
