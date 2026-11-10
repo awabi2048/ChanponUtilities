@@ -12,7 +12,8 @@ class ChanponPlayerStatePolicy(private val tourMode: (Player, WorldData) -> Bool
 
     override fun evaluate(player: Player, worldData: WorldData): WorldPlayerStateDecision {
         val admin = isAdmin(player)
-        val builder = ChanponPlayerStateRules.isBuilder(player.uniqueId, worldData.owner, worldData.members, admin)
+        // モデレーターは保存上 members と別集合のため、飛行判定では両方を参加者として扱います。
+        val builder = ChanponPlayerStateRules.isBuilder(player.uniqueId, worldData.owner, worldData.members + worldData.moderators, admin)
         // ワールドポリシーは飛行制約だけを返し、ゲームモードは変更しません。
         // 建築可否は WorldGuard の __global__ フラグ判定へ一元化するため、
         // このポリシーは buildAllowed に意見を返しません（null）。
