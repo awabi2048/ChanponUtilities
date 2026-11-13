@@ -29,8 +29,8 @@ class TourStorageClassificationTest {
         assertFalse(isTourTradeTarget(proxy(Cow::class.java)))
     }
 
-    @Test fun `ワールドの収納を制限し独自GUIとプレイヤー自身の収納は除外する`() {
-        assertTrue(isWorldStorage(inventory(proxy(Dropper::class.java))))
+    @Test fun `ブロック収納を許可しエンティティ収納の保護は維持する`() {
+        assertFalse(isWorldStorage(inventory(proxy(Dropper::class.java))))
         assertTrue(isWorldStorage(inventory(proxy(HopperMinecart::class.java))))
         assertFalse(isWorldStorage(inventory(proxy(Player::class.java))))
         assertFalse(isWorldStorage(inventory(null)))

@@ -1,11 +1,8 @@
 package me.awabi2048.chanponutilities.tour
 
-import io.papermc.paper.event.player.PlayerInsertLecternBookEvent
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
 import me.awabi2048.chanponutilities.api.TourEntityClickEvent
 import org.bukkit.Material
-import org.bukkit.block.BlockState
-import org.bukkit.block.DoubleChest
 import org.bukkit.entity.Entity
 import org.bukkit.entity.AbstractArrow
 import org.bukkit.entity.Player
@@ -24,9 +21,7 @@ import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.inventory.InventoryOpenEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
-import org.bukkit.event.player.PlayerTakeLecternBookEvent
 import org.bukkit.inventory.Inventory
-import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.LecternInventory
 import org.bukkit.inventory.MerchantInventory
 
@@ -37,7 +32,7 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun open(event: InventoryOpenEvent) {
         val player = event.player as? Player ?: return
-        // 書見台は画面を開いて閲覧できます。本の出し入れは専用イベント等で拒否します。
+        // ブロック収納は許可し、収納付きエンティティの画面を保護します。
         if (!bypass(player) && event.inventory !is LecternInventory && isWorldStorage(event.inventory)) {
             event.isCancelled = true
         }
@@ -71,24 +66,7 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
             }
             return
         }
-        if (event.action != Action.RIGHT_CLICK_BLOCK || bypass(event.player)) return
-        val block = event.clickedBlock ?: return
-        // 書見台は閲覧可能なままとし、挿入と取り出しだけ専用イベントで拒否します。
-        if (block.type == Material.LECTERN) return
-        // 棚・模様入りの本棚・飾り壺・ジュークボックス等、GUIを開かない収納も含みます。
-        if (block.state !is InventoryHolder) return
-        event.setUseInteractedBlock(Event.Result.DENY)
-        event.setUseItemInHand(Event.Result.DENY)
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun insert(event: PlayerInsertLecternBookEvent) {
-        if (!bypass(event.player)) event.isCancelled = true
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    fun take(event: PlayerTakeLecternBookEvent) {
-        if (!bypass(event.player)) event.isCancelled = true
+        // ブロックコンテナの内容物は観光中も操作可能とし、他の保護の判定に委ねます。
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -151,12 +129,11 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
     }
 }
 
-/** 独自GUIやプレイヤー自身のインベントリは、ワールド上の収納として扱いません。 */
+/** ブロック収納と独自GUIを許可し、収納付きエンティティの保護を維持します。 */
 internal fun isWorldStorage(inventory: Inventory): Boolean {
     val holder = inventory.holder
-    // 村人の取引画面は収納ではなく、取引のクリックも許可します。
     if (inventory is MerchantInventory && holder is Villager) return false
-    return holder is BlockState || holder is DoubleChest || (holder is Entity && holder !is Player)
+    return holder is Entity && holder !is Player
 }
 
 /** 村人との取引操作だけを観光モードのエンティティ保護から除外します。 */
