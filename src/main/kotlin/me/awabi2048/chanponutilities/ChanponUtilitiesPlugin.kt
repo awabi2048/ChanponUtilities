@@ -379,6 +379,8 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             tourModeListener = tour
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
+            // 観光モードの操作による周囲更新保護はUtilitiesが所有します。
+            server.pluginManager.registerEvents(me.awabi2048.chanponutilities.tour.InteractionAdjacentPhysicsListener(this), this)
             server.pluginManager.registerEvents(TourMobEggProtection(::isTourActive), this)
             if (server.pluginManager.isPluginEnabled("WorldGuard")) {
                 server.pluginManager.registerEvents(TourWorldGuardListener(this), this)

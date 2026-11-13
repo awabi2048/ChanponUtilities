@@ -7,11 +7,11 @@ plugins {
 }
 
 group = "me.awabi2048"
-version = "26.1111.1"
+version = "26.1113.1"
 
 repositories {
     mavenLocal()
-    maven { url = uri("../.m2-paper26-kotlin2320") }
+    maven { url = uri(providers.gradleProperty("workspaceMavenRepository").getOrElse("../.m2-paper26-kotlin2320")) }
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://api.modrinth.com/maven")
     maven("https://repo.dmulloy2.net/repository/public/")
@@ -78,7 +78,7 @@ publishing {
     repositories {
         maven {
             name = "workspace"
-            url = uri("../.m2-paper26-kotlin2320")
+            url = uri(providers.gradleProperty("workspaceMavenRepository").getOrElse("../.m2-paper26-kotlin2320"))
         }
     }
 }
