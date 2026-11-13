@@ -3,7 +3,6 @@ package me.awabi2048.chanponutilities.listener
 import me.awabi2048.myworldmanager.api.MyWorldManagerApi
 import me.awabi2048.myworldmanager.api.event.MwmWorldCreatedEvent
 import me.awabi2048.myworldmanager.api.event.MwmWorldWarpedEvent
-import me.awabi2048.chanponutilities.policy.ChanponPlayerStateRules
 import org.bukkit.GameMode
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -53,9 +52,8 @@ class PlayerStatePolicyListener(
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     fun onFlightToggle(event: PlayerToggleFlightEvent) {
         val player = event.player
-        if (!ChanponPlayerStateRules.flightRestrictionApplies(player.gameMode)) return
         val worldData = MyWorldManagerApi.getWorldRepository()?.findByWorldKey(player.world.key.toString()) ?: return
-        if (worldData.allowFlight) return
+        if (MyWorldManagerApi.isFlightAllowed(player, worldData)) return
         event.isCancelled = true
         player.allowFlight = false
         if (player.isFlying) player.isFlying = false

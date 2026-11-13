@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test
 class ChanponPlayerStatePolicyTest {
     private val owner = UUID.randomUUID()
     private val member = UUID.randomUUID()
+    private val moderator = UUID.randomUUID()
     private val guest = UUID.randomUUID()
 
     private fun worldData(): WorldData = WorldData(
@@ -34,6 +35,7 @@ class ChanponPlayerStatePolicyTest {
         expireDate = "",
         owner = owner,
         members = mutableListOf(member),
+        moderators = mutableListOf(moderator),
         allowFlight = true
     )
 
@@ -68,17 +70,29 @@ class ChanponPlayerStatePolicyTest {
         val world = worldData()
         assertEquals(true, policy.evaluate(player(owner, admin = false), world).flightAllowed)
         assertEquals(true, policy.evaluate(player(member, admin = false), world).flightAllowed)
+        assertEquals(true, policy.evaluate(player(moderator, admin = false), world).flightAllowed)
         assertEquals(false, policy.evaluate(player(guest, admin = false), world).flightAllowed)
         assertEquals(true, policy.evaluate(player(guest, admin = true), world).flightAllowed)
+        world.allowFlight = false
+        assertEquals(false, policy.evaluate(player(moderator, admin = false), world).flightAllowed)
     }
 
     @Test
     fun `観光中は訪問者も飛行できるがワールドの飛行禁止は維持する`() {
-        val policy = ChanponPlayerStatePolicy { true }
+        val policy = ChanponPlayerStatePolicy { _, _ -> true }
         val world = worldData()
         assertEquals(true, policy.evaluate(player(guest, admin = false), world).flightAllowed)
         world.allowFlight = false
         assertEquals(false, policy.evaluate(player(guest, admin = false), world).flightAllowed)
+    }
+
+    @Test
+    fun `シミュレーションの飛行判定は対象ワールドだけに適用する`() {
+        val simulated = worldData()
+        val normal = worldData()
+        val policy = ChanponPlayerStatePolicy { _, world -> world.uuid == simulated.uuid }
+        assertEquals(true, policy.evaluate(player(guest, admin = false), simulated).flightAllowed)
+        assertEquals(false, policy.evaluate(player(guest, admin = false), normal).flightAllowed)
     }
 
     @Test

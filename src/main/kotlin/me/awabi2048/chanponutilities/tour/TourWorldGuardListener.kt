@@ -10,11 +10,11 @@ import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerInteractEntityEvent
 
 /** 提出ロックの interact 許可を、建築物扱いのエンティティにも適用します。 */
-internal class TourWorldGuardListener : Listener {
+internal class TourWorldGuardListener(private val plugin: me.awabi2048.chanponutilities.ChanponUtilitiesPlugin) : Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     fun onUse(event: UseEntityEvent) {
         val original = event.originalEvent as? PlayerInteractEntityEvent ?: return
-        if (original.isCancelled || isTourAdmin(original.player)) return
+        if (original.isCancelled || isTourAdmin(original.player) || !plugin.isTourActive(original.player.world)) return
         val query = WorldGuard.getInstance().platform.regionContainer.createQuery()
         val regions = query.getApplicableRegions(BukkitAdapter.adapt(event.target))
         if (regions.isVirtual || regions.none { it.id == "chanpon_submitted_lock" }) return
