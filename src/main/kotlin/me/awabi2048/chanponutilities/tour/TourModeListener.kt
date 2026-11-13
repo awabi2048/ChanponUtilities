@@ -2,6 +2,7 @@ package me.awabi2048.chanponutilities.tour
 
 import com.awabi2048.ccsystem.api.localization.generated.ChanponUtilitiesKeys
 import me.awabi2048.chanponutilities.ChanponUtilitiesPlugin
+import me.awabi2048.chanponutilities.api.TourSimulationChangedEvent
 import me.awabi2048.chanponutilities.util.ChanponI18n
 import org.bukkit.GameMode
 import org.bukkit.entity.Player
@@ -18,10 +19,26 @@ internal class TourModeListener(
     private val plugin: ChanponUtilitiesPlugin,
     private val isFreecamActive: (UUID) -> Boolean,
 ) : Listener {
+    private val recovery = TourSimulationRecovery(java.io.File(plugin.dataFolder, "data/tour-simulation-recovery.yml"))
     private fun bypass(player: Player): Boolean = isTourAdmin(player)
 
     fun sync(player: Player) {
-        if (!player.isOnline || bypass(player)) return
+        if (!player.isOnline) return
+        if (bypass(player) || !plugin.isTourActive(player.world)) {
+            if (!isFreecamActive(player.uniqueId)) {
+                val previous = recovery.get(player.uniqueId)
+                if (previous != null) {
+                    player.gameMode = previous
+                    if (player.gameMode == previous) recovery.forget(player.uniqueId)
+                    if (plugin.server.pluginManager.isPluginEnabled("MyWorldManager")) TourModeWorlds.restore(player)
+                }
+            }
+            return
+        }
+        // FreeCam中はその終了時の復元値を先に適用し、スペクテイターを元のモードとして保存しません。
+        if (plugin.isTourSimulationActive(player.world) && !isFreecamActive(player.uniqueId)) {
+            recovery.remember(player.uniqueId, player.gameMode)
+        }
         val expected = tourGameMode(isFreecamActive(player.uniqueId))
         if (player.gameMode != expected) {
             player.gameMode = expected
@@ -41,6 +58,11 @@ internal class TourModeListener(
     @EventHandler(priority = EventPriority.MONITOR)
     fun onWorldChange(event: PlayerChangedWorldEvent) = later(event.player)
 
+    @EventHandler
+    fun onSimulationChanged(event: TourSimulationChangedEvent) {
+        plugin.server.onlinePlayers.forEach(::sync)
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun afterGameModeChange(event: PlayerGameModeChangeEvent) {
         // モード変更時にMinecraft自身が飛行権限を初期化するため、変更完了後に再適用します。
@@ -49,7 +71,7 @@ internal class TourModeListener(
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun onGameMode(event: PlayerGameModeChangeEvent) {
-        if (bypass(event.player) || event.newGameMode == tourGameMode(isFreecamActive(event.player.uniqueId))) return
+        if (bypass(event.player) || !plugin.isTourActive(event.player.world) || event.newGameMode == tourGameMode(isFreecamActive(event.player.uniqueId))) return
         event.isCancelled = true
         notify(event.player)
         // イベント中に再変更せず、現在のFreeCam状態から次tickで正しいモードを再評価します。

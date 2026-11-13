@@ -32,7 +32,7 @@ import org.bukkit.inventory.MerchantInventory
 
 /** 観光中のプレイヤー操作だけを制限し、ホッパー等の搬送には干渉しません。 */
 internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugin) : Listener {
-    private fun bypass(player: Player) = isTourAdmin(player)
+    private fun bypass(player: Player) = isTourAdmin(player) || !plugin.isTourActive(player.world)
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun open(event: InventoryOpenEvent) {

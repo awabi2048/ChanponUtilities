@@ -7,11 +7,11 @@ plugins {
 }
 
 group = "me.awabi2048"
-version = "26.1113.2"
+version = "26.1114.1"
 
 repositories {
     mavenLocal()
-    maven { url = uri("../.m2-paper26-kotlin2320") }
+    maven { url = uri(providers.gradleProperty("workspaceMavenRepository").getOrElse("../.m2-paper26-kotlin2320")) }
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://api.modrinth.com/maven")
     maven("https://repo.dmulloy2.net/repository/public/")
@@ -31,7 +31,7 @@ kotlin {
 val providedDeps = listOf(
     "io.papermc.paper:paper-api:26.2.build.129-stable",
     "com.awabi2048:CC-System:26.1107.1",
-    "awabi2048:my-world-manager:26.1022.2",
+    "awabi2048:my-world-manager:26.1108.2",
     "maven.modrinth:GOHbQGyX:nZM8fxpG",
     "net.dmulloy2:ProtocolLib:5.4.0",
     "com.sk89q.worldedit:worldedit-bukkit:7.3.16",
@@ -78,7 +78,7 @@ publishing {
     repositories {
         maven {
             name = "workspace"
-            url = uri("../.m2-paper26-kotlin2320")
+            url = uri(providers.gradleProperty("workspaceMavenRepository").getOrElse("../.m2-paper26-kotlin2320"))
         }
     }
 }

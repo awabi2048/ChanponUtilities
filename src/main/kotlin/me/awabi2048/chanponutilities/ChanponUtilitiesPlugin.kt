@@ -33,6 +33,7 @@ import me.awabi2048.chanponutilities.service.LecternBookshelfLinkStore
 import me.awabi2048.chanponutilities.tour.TourModeListener
 import me.awabi2048.chanponutilities.tour.TourModeWorlds
 import me.awabi2048.chanponutilities.tour.TourInteractionListener
+import me.awabi2048.chanponutilities.tour.TourMobEggProtection
 import me.awabi2048.chanponutilities.tour.TourWorldGuardListener
 import me.awabi2048.chanponutilities.tour.isTourAdmin
 import org.bukkit.Bukkit
@@ -79,6 +80,14 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
     }
 
     internal fun isModuleEnabled(module: ChanponModule): Boolean = moduleState.isEnabled(module)
+
+    /** 全体観光と外部のワールド単位シミュレーションを同じ入口で合成します。 */
+    internal fun isTourActive(world: org.bukkit.World): Boolean =
+        isModuleEnabled(ChanponModule.TOUR_MODE) ||
+            server.servicesManager.load(me.awabi2048.chanponutilities.api.TourSimulationProvider::class.java)?.isSimulated(world) == true
+
+    internal fun isTourSimulationActive(world: org.bukkit.World): Boolean =
+        server.servicesManager.load(me.awabi2048.chanponutilities.api.TourSimulationProvider::class.java)?.isSimulated(world) == true
 
     internal fun currentModuleState(): ChanponModuleState = moduleState
 
@@ -283,6 +292,7 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
             }
             val freecam = FreecamSessionService(this, poseCaptureService) { player ->
                 // 復元直後の保存値より、観光モードと現在のワールド設定を優先します。
+                if (server.pluginManager.isPluginEnabled("MyWorldManager")) TourModeWorlds.restore(player)
                 tourModeListener?.later(player)
             }
             freecamSessionService = freecam
@@ -363,13 +373,17 @@ class ChanponUtilitiesPlugin : JavaPlugin() {
         } else if (!server.pluginManager.isPluginEnabled("MyWorldManager")) {
             logger.info("MyWorldManager is unavailable; player-state integration is disabled.")
         }
-        if (isModuleEnabled(ChanponModule.TOUR_MODE)) {
+        run {
+            server.pluginManager.registerEvents(me.awabi2048.chanponutilities.tour.StuckPoweredControlListener(this), this)
             val tour = TourModeListener(this) { playerId -> freecamSessionService?.isActive(playerId) == true }
             tourModeListener = tour
             server.pluginManager.registerEvents(tour, this)
             server.pluginManager.registerEvents(TourInteractionListener(this), this)
+            // 観光モードの操作による周囲更新保護はUtilitiesが所有します。
+            server.pluginManager.registerEvents(me.awabi2048.chanponutilities.tour.InteractionAdjacentPhysicsListener(this), this)
+            server.pluginManager.registerEvents(TourMobEggProtection(::isTourActive), this)
             if (server.pluginManager.isPluginEnabled("WorldGuard")) {
-                server.pluginManager.registerEvents(TourWorldGuardListener(), this)
+                server.pluginManager.registerEvents(TourWorldGuardListener(this), this)
             }
             // 有効化コマンドの完了を待たず、接続中の利用者へ現在の状態を適用します。
             server.onlinePlayers.forEach(tour::sync)
