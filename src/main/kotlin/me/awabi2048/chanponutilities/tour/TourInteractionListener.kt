@@ -10,6 +10,7 @@ import org.bukkit.entity.Entity
 import org.bukkit.entity.AbstractArrow
 import org.bukkit.entity.Player
 import org.bukkit.entity.Projectile
+import org.bukkit.entity.Villager
 import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -27,6 +28,7 @@ import org.bukkit.event.player.PlayerTakeLecternBookEvent
 import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.LecternInventory
+import org.bukkit.inventory.MerchantInventory
 
 /** 観光中のプレイヤー操作だけを制限し、ホッパー等の搬送には干渉しません。 */
 internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugin) : Listener {
@@ -91,7 +93,8 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     fun entity(event: PlayerInteractEntityEvent) {
-        if (bypass(event.player)) return
+        // 村人の取引操作は観光中も許可し、拒否時専用の通知も発行しません。
+        if (bypass(event.player) || isTourTradeTarget(event.rightClicked)) return
         event.isCancelled = true
         plugin.server.pluginManager.callEvent(TourEntityClickEvent(event.player, event.rightClicked, event.hand))
     }
@@ -151,5 +154,10 @@ internal class TourInteractionListener(private val plugin: ChanponUtilitiesPlugi
 /** 独自GUIやプレイヤー自身のインベントリは、ワールド上の収納として扱いません。 */
 internal fun isWorldStorage(inventory: Inventory): Boolean {
     val holder = inventory.holder
+    // 村人の取引画面は収納ではなく、取引のクリックも許可します。
+    if (inventory is MerchantInventory && holder is Villager) return false
     return holder is BlockState || holder is DoubleChest || (holder is Entity && holder !is Player)
 }
+
+/** 村人との取引操作だけを観光モードのエンティティ保護から除外します。 */
+internal fun isTourTradeTarget(entity: Entity): Boolean = entity is Villager
